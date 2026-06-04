@@ -82,25 +82,48 @@ function isUpdatePreview(value: unknown): value is UpdatePreview {
 function isN8nWorkflowShape(value: unknown): value is N8nWorkflow {
   return (
     isRecord(value) &&
+    (value.id === undefined || typeof value.id === "string") &&
     typeof value.name === "string" &&
     typeof value.active === "boolean" &&
     Array.isArray(value.nodes) &&
     value.nodes.every(isN8nWorkflowNodeShape) &&
     isN8nWorkflowConnectionsShape(value.connections) &&
-    isRecord(value.settings)
+    isRecord(value.settings) &&
+    (value.tags === undefined || isWorkflowTagsShape(value.tags)) &&
+    (value.meta === undefined || isRecord(value.meta))
   )
 }
 
 function isN8nWorkflowNodeShape(value: unknown): value is N8nWorkflowNode {
   return (
     isRecord(value) &&
+    (value.id === undefined || typeof value.id === "string") &&
     typeof value.name === "string" &&
     typeof value.type === "string" &&
     typeof value.typeVersion === "number" &&
     Number.isFinite(value.typeVersion) &&
     isPositionTuple(value.position) &&
     isRecord(value.parameters) &&
-    (value.credentials === undefined || isRecord(value.credentials))
+    (value.credentials === undefined || isCredentialsShape(value.credentials))
+  )
+}
+
+function isWorkflowTagsShape(value: unknown): value is N8nWorkflow["tags"] {
+  return (
+    Array.isArray(value) &&
+    value.every((tag) => typeof tag === "string" || (isRecord(tag) && typeof tag.name === "string"))
+  )
+}
+
+function isCredentialsShape(value: unknown): value is N8nWorkflowNode["credentials"] {
+  return isRecord(value) && Object.values(value).every(isCredentialEntryShape)
+}
+
+function isCredentialEntryShape(value: unknown): value is { id?: string; name?: string } {
+  return (
+    isRecord(value) &&
+    (value.id === undefined || typeof value.id === "string") &&
+    (value.name === undefined || typeof value.name === "string")
   )
 }
 

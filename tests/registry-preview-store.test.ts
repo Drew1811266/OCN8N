@@ -261,6 +261,66 @@ describe("PreviewStore", () => {
     expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
   })
 
+  it("returns undefined when preview workflow tags are malformed", async () => {
+    const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
+    const store = new PreviewStore(previewDir)
+    const validUuid = "123e4567-e89b-12d3-a456-426614174000"
+
+    await mkdir(previewDir, { recursive: true })
+    await writeFile(
+      path.join(previewDir, `${validUuid}.json`),
+      JSON.stringify(
+        previewEnvelope({
+          proposedWorkflow: {
+            name: simpleWebhookPlan.name,
+            active: false,
+            nodes: [],
+            connections: {},
+            settings: {},
+            tags: [null],
+          },
+        }),
+      ),
+      "utf8",
+    )
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
+  })
+
+  it("returns undefined when preview workflow node credentials are malformed", async () => {
+    const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
+    const store = new PreviewStore(previewDir)
+    const validUuid = "123e4567-e89b-12d3-a456-426614174000"
+
+    await mkdir(previewDir, { recursive: true })
+    await writeFile(
+      path.join(previewDir, `${validUuid}.json`),
+      JSON.stringify(
+        previewEnvelope({
+          proposedWorkflow: {
+            name: simpleWebhookPlan.name,
+            active: false,
+            nodes: [
+              {
+                name: "Send Slack Alert",
+                type: "n8n-nodes-base.slack",
+                typeVersion: 2,
+                position: [0, 0],
+                parameters: {},
+                credentials: { slackApi: "bad" },
+              },
+            ],
+            connections: {},
+            settings: {},
+          },
+        }),
+      ),
+      "utf8",
+    )
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
+  })
+
   it("returns undefined for missing or expired previews", async () => {
     const store = new PreviewStore(path.join(dir, ".opencode", "n8n-update-previews"))
 
