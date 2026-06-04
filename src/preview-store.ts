@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
-import type { N8nWorkflow } from "./validator.js"
+import type { N8nWorkflow, N8nWorkflowConnection, N8nWorkflowNode } from "./validator.js"
 
 export type UpdatePreview = {
   previewId: string
@@ -85,8 +85,55 @@ function isN8nWorkflowShape(value: unknown): value is N8nWorkflow {
     typeof value.name === "string" &&
     typeof value.active === "boolean" &&
     Array.isArray(value.nodes) &&
-    isRecord(value.connections) &&
+    value.nodes.every(isN8nWorkflowNodeShape) &&
+    isN8nWorkflowConnectionsShape(value.connections) &&
     isRecord(value.settings)
+  )
+}
+
+function isN8nWorkflowNodeShape(value: unknown): value is N8nWorkflowNode {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    typeof value.type === "string" &&
+    typeof value.typeVersion === "number" &&
+    Number.isFinite(value.typeVersion) &&
+    isPositionTuple(value.position) &&
+    isRecord(value.parameters) &&
+    (value.credentials === undefined || isRecord(value.credentials))
+  )
+}
+
+function isPositionTuple(value: unknown): value is [number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))
+  )
+}
+
+function isN8nWorkflowConnectionsShape(value: unknown): value is N8nWorkflow["connections"] {
+  return isRecord(value) && Object.values(value).every(isOutputMap)
+}
+
+function isOutputMap(value: unknown): value is Record<string, N8nWorkflowConnection[][]> {
+  return isRecord(value) && Object.values(value).every(isConnectionGroups)
+}
+
+function isConnectionGroups(value: unknown): value is N8nWorkflowConnection[][] {
+  return (
+    Array.isArray(value) &&
+    value.every((group) => Array.isArray(group) && group.every(isN8nWorkflowConnectionShape))
+  )
+}
+
+function isN8nWorkflowConnectionShape(value: unknown): value is N8nWorkflowConnection {
+  return (
+    isRecord(value) &&
+    typeof value.node === "string" &&
+    typeof value.type === "string" &&
+    typeof value.index === "number" &&
+    Number.isFinite(value.index)
   )
 }
 

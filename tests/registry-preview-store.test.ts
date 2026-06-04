@@ -34,6 +34,27 @@ function registryRecord(overrides: Partial<WorkflowRegistryRecord> = {}): Workfl
   }
 }
 
+function previewEnvelope(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    previewId: "123e4567-e89b-12d3-a456-426614174000",
+    workflowId: "wf_1",
+    baseWorkflowHash: "base",
+    proposedWorkflowHash: "proposed",
+    summary: "Add Slack node",
+    changes: ["Add Slack node"],
+    proposedWorkflow: {
+      name: simpleWebhookPlan.name,
+      active: false,
+      nodes: [],
+      connections: {},
+      settings: {},
+    },
+    createdAt: "2026-06-04T00:00:00.000Z",
+    expiresAt: "2026-06-04T00:30:00.000Z",
+    ...overrides,
+  }
+}
+
 describe("WorkflowRegistry", () => {
   it("saves, upserts, and lists managed workflow records under .opencode", async () => {
     const registry = new WorkflowRegistry(registryPath())
@@ -180,6 +201,60 @@ describe("PreviewStore", () => {
         createdAt: "2026-06-04T00:00:00.000Z",
         expiresAt: "not-a-date",
       }),
+      "utf8",
+    )
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
+  })
+
+  it("returns undefined when preview workflow nodes are malformed", async () => {
+    const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
+    const store = new PreviewStore(previewDir)
+    const validUuid = "123e4567-e89b-12d3-a456-426614174000"
+
+    await mkdir(previewDir, { recursive: true })
+    await writeFile(
+      path.join(previewDir, `${validUuid}.json`),
+      JSON.stringify(
+        previewEnvelope({
+          proposedWorkflow: {
+            name: simpleWebhookPlan.name,
+            active: false,
+            nodes: [null],
+            connections: {},
+            settings: {},
+          },
+        }),
+      ),
+      "utf8",
+    )
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
+  })
+
+  it("returns undefined when preview workflow connections are malformed", async () => {
+    const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
+    const store = new PreviewStore(previewDir)
+    const validUuid = "123e4567-e89b-12d3-a456-426614174000"
+
+    await mkdir(previewDir, { recursive: true })
+    await writeFile(
+      path.join(previewDir, `${validUuid}.json`),
+      JSON.stringify(
+        previewEnvelope({
+          proposedWorkflow: {
+            name: simpleWebhookPlan.name,
+            active: false,
+            nodes: [],
+            connections: {
+              Receive: {
+                main: [[{ type: "main", index: 0 }]],
+              },
+            },
+            settings: {},
+          },
+        }),
+      ),
       "utf8",
     )
 
