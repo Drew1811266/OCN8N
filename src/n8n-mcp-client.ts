@@ -141,8 +141,12 @@ function validateMcpContent(content: unknown): McpContent[] {
   }
 
   for (const item of content) {
-    if (Object.hasOwn(item, "type") && typeof item.type !== "string") {
+    if (typeof item.type !== "string") {
       throwProtocolError("invalid_content_type")
+    }
+
+    if (item.type === "text" && typeof item.text !== "string") {
+      throwProtocolError("invalid_content_text")
     }
   }
 
