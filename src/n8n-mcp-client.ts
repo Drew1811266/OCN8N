@@ -8,6 +8,7 @@ type McpContent = {
 }
 
 type McpResponse = {
+  jsonrpc: "2.0"
   id?: string | number | null
   result?: {
     content?: McpContent[]
@@ -95,33 +96,93 @@ export class N8nMcpClient {
       )
     }
 
-    let data: McpResponse
+    let data: unknown
     try {
-      data = (await response.json()) as McpResponse
+      data = await response.json()
     } catch {
       throw new N8nBuilderError("n8n MCP returned invalid JSON.", "N8N_MCP_TOOL_ERROR", {
         toolName,
       })
     }
 
-    if (data.id !== expectedId) {
+    const mcpResponse = parseMcpResponse(data)
+
+    if (mcpResponse.id !== expectedId) {
       throw new N8nBuilderError("n8n MCP returned a mismatched JSON-RPC response id.", "N8N_MCP_PROTOCOL_ERROR", {
         expectedId,
-        responseId: sanitizeProtocolId(data.id),
+        responseId: sanitizeProtocolId(mcpResponse.id),
       })
     }
 
-    if (data.error) {
+    if (mcpResponse.error) {
       const details: Record<string, unknown> = { toolName }
-      if (typeof data.error.code === "number" || typeof data.error.code === "string") {
-        details.errorCode = data.error.code
+      if (typeof mcpResponse.error.code === "number") {
+        details.errorCode = mcpResponse.error.code
       }
 
       throw new N8nBuilderError(`n8n MCP tool ${toolName} failed.`, "N8N_MCP_TOOL_ERROR", details)
     }
 
-    return data
+    return mcpResponse
   }
+}
+
+function parseMcpResponse(value: unknown): McpResponse {
+  if (!isRecord(value)) {
+    throwProtocolError("response_not_object")
+  }
+
+  if (value.jsonrpc !== "2.0") {
+    throwProtocolError("invalid_jsonrpc")
+  }
+
+  if (!Object.hasOwn(value, "id") || !isJsonRpcId(value.id)) {
+    throwProtocolError("invalid_id")
+  }
+
+  const id = value.id
+
+  if (Object.hasOwn(value, "error")) {
+    if (!isRecord(value.error)) {
+      throwProtocolError("invalid_error")
+    }
+
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: {
+        code: typeof value.error.code === "number" ? value.error.code : undefined,
+      },
+    }
+  }
+
+  if (!Object.hasOwn(value, "result")) {
+    throwProtocolError("missing_result")
+  }
+
+  if (!isRecord(value.result)) {
+    throwProtocolError("invalid_result")
+  }
+
+  return {
+    jsonrpc: "2.0",
+    id,
+    result: value.result,
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isJsonRpcId(value: unknown): value is string | number | null {
+  return typeof value === "string" || typeof value === "number" || value === null
+}
+
+function throwProtocolError(reason: string): never {
+  throw new N8nBuilderError("n8n MCP returned a malformed JSON-RPC response.", "N8N_MCP_PROTOCOL_ERROR", {
+    reason,
+  })
 }
 
 function sanitizeProtocolId(id: string | number | null | undefined): string | number | null | undefined {
