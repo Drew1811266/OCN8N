@@ -11,21 +11,26 @@ export function compileWorkflowPlan(input: CompileWorkflowPlanInput): N8nWorkflo
   const plan = workflowPlanSchema.parse(input.plan)
   const keyToName = new Map(plan.nodes.map((node) => [node.key, node.name]))
 
-  const nodes = plan.nodes.map((node, index) => ({
-    id: `${index + 1}`,
-    name: node.name,
-    type: node.type,
-    typeVersion: node.typeVersion,
-    position: node.position,
-    parameters: node.parameters ?? {},
-    credentials: node.credential
-      ? {
-          [node.credential.type]: {
-            name: node.credential.name,
-          },
-        }
-      : undefined,
-  }))
+  const nodes: N8nWorkflow["nodes"] = plan.nodes.map((node, index) => {
+    const compiledNode: N8nWorkflow["nodes"][number] = {
+      id: `${index + 1}`,
+      name: node.name,
+      type: node.type,
+      typeVersion: node.typeVersion,
+      position: node.position,
+      parameters: node.parameters ?? {},
+    }
+
+    if (node.credential) {
+      compiledNode.credentials = {
+        [node.credential.type]: {
+          name: node.credential.name,
+        },
+      }
+    }
+
+    return compiledNode
+  })
 
   const connections: N8nWorkflow["connections"] = {}
 
@@ -39,8 +44,13 @@ export function compileWorkflowPlan(input: CompileWorkflowPlanInput): N8nWorkflo
 
     connections[fromName] ??= {}
     connections[fromName][output] ??= []
-    connections[fromName][output][outputIndex] ??= []
-    connections[fromName][output][outputIndex].push({
+    const outputConnections = connections[fromName][output]
+
+    while (outputConnections.length <= outputIndex) {
+      outputConnections.push([])
+    }
+
+    outputConnections[outputIndex].push({
       node: toName,
       type: input,
       index: inputIndex,
