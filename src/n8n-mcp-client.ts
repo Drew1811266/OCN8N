@@ -16,8 +16,8 @@ type McpResponse = {
     [key: string]: unknown
   }
   error?: {
-    code?: unknown
-    message?: unknown
+    code: number
+    message: string
   }
 }
 
@@ -142,22 +142,34 @@ function parseMcpResponse(value: unknown): McpResponse {
 
   const id = value.id
 
-  if (Object.hasOwn(value, "error")) {
+  const hasResult = Object.hasOwn(value, "result")
+  const hasError = Object.hasOwn(value, "error")
+
+  if (hasResult === hasError) {
+    throwProtocolError(hasResult ? "result_and_error_present" : "missing_result_or_error")
+  }
+
+  if (hasError) {
     if (!isRecord(value.error)) {
       throwProtocolError("invalid_error")
+    }
+
+    if (typeof value.error.code !== "number" || !Number.isInteger(value.error.code)) {
+      throwProtocolError("invalid_error_code")
+    }
+
+    if (typeof value.error.message !== "string") {
+      throwProtocolError("invalid_error_message")
     }
 
     return {
       jsonrpc: "2.0",
       id,
       error: {
-        code: typeof value.error.code === "number" ? value.error.code : undefined,
+        code: value.error.code,
+        message: value.error.message,
       },
     }
-  }
-
-  if (!Object.hasOwn(value, "result")) {
-    throwProtocolError("missing_result")
   }
 
   if (!isRecord(value.result)) {

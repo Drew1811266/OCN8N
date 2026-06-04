@@ -249,7 +249,7 @@ describe("N8nMcpClient", () => {
     expect(JSON.stringify(error)).not.toContain("secret-value")
   })
 
-  it("does not expose secret-looking JSON-RPC string error codes", async () => {
+  it("rejects JSON-RPC string error codes without leaking code content", async () => {
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
       return new Response(
         JSON.stringify({
@@ -270,9 +270,84 @@ describe("N8nMcpClient", () => {
     }
 
     expect(error).toBeInstanceOf(N8nBuilderError)
-    expect((error as N8nBuilderError).code).toBe("N8N_MCP_TOOL_ERROR")
-    expect((error as N8nBuilderError).details).toEqual({ toolName: "search_nodes" })
+    expect((error as N8nBuilderError).code).toBe("N8N_MCP_PROTOCOL_ERROR")
     expect(JSON.stringify(error)).not.toContain("secret-value")
+  })
+
+  it("throws a typed protocol error when both result and error are present", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: { content: [{ type: "text", text: "SDK docs" }] },
+          error: { code: -32000, message: "Tool failed" },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.getSdkReference("rules")).rejects.toMatchObject({
+      code: "N8N_MCP_PROTOCOL_ERROR",
+    })
+  })
+
+  it("throws a typed protocol error when JSON-RPC error code is missing", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          error: { message: "Tool failed" },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.getSdkReference("rules")).rejects.toMatchObject({
+      code: "N8N_MCP_PROTOCOL_ERROR",
+    })
+  })
+
+  it("throws a typed protocol error when JSON-RPC error code is not an integer", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          error: { code: -32000.5, message: "Tool failed" },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.getSdkReference("rules")).rejects.toMatchObject({
+      code: "N8N_MCP_PROTOCOL_ERROR",
+    })
+  })
+
+  it("throws a typed protocol error when JSON-RPC error message is missing or not a string", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ jsonrpc: "2.0", id: "1", error: { code: -32000 } }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ jsonrpc: "2.0", id: "2", error: { code: -32000, message: 123 } }), {
+          status: 200,
+        }),
+      )
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.getSdkReference("rules")).rejects.toMatchObject({
+      code: "N8N_MCP_PROTOCOL_ERROR",
+    })
+    await expect(client.getSdkReference("rules")).rejects.toMatchObject({
+      code: "N8N_MCP_PROTOCOL_ERROR",
+    })
   })
 
   it("throws a typed protocol error when JSON-RPC response id mismatches the request id", async () => {
