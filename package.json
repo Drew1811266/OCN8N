@@ -1,0 +1,44 @@
+{
+  "name": "opencode-n8n-builder",
+  "version": "0.1.0",
+  "description": "OpenCode plugin for creating and updating managed n8n workflow drafts.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "latest",
+    "@opencode-ai/sdk": "latest",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.0"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "n8n",
+    "workflow",
+    "automation"
+  ],
+  "license": "MIT"
+}
