@@ -206,13 +206,21 @@ function redactSecretValues(value: unknown): unknown {
     return value.map(redactSecretValues)
   }
 
+  if (typeof value === "string" && isSecretStringValue(value)) {
+    return "[REDACTED]"
+  }
+
   if (!isRecord(value)) {
     return value
   }
 
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => {
-      return [key, isSecretKey(key) ? "[REDACTED]" : redactSecretValues(item)]
+      if (isSecretKey(key) || isContextualSecretValue(key, item, value)) {
+        return [key, "[REDACTED]"]
+      }
+
+      return [key, redactSecretValues(item)]
     }),
   )
 }
@@ -226,8 +234,41 @@ function isSecretKey(key: string): boolean {
   return secretKeyFragments.some((fragment) => normalizedKey.includes(fragment))
 }
 
+function isSecretStringValue(value: string): boolean {
+  return /^Bearer\s+\S+/i.test(value)
+}
+
+function isContextualSecretValue(key: string, value: unknown, parent: Record<string, unknown>): boolean {
+  return typeof value === "string" && isGenericSecretValueKey(key) && hasSecretSiblingContext(parent)
+}
+
+function isGenericSecretValueKey(key: string): boolean {
+  const normalizedKey = key.replace(/[^a-z0-9]/gi, "").toLowerCase()
+  return normalizedKey === "value" || normalizedKey === "headervalue"
+}
+
+function hasSecretSiblingContext(parent: Record<string, unknown>): boolean {
+  return Object.entries(parent).some(([key, value]) => {
+    return isSecretContextKey(key) && typeof value === "string" && isSecretLabel(value)
+  })
+}
+
+function isSecretContextKey(key: string): boolean {
+  const normalizedKey = key.replace(/[^a-z0-9]/gi, "").toLowerCase()
+  return normalizedKey === "name" || normalizedKey === "headername"
+}
+
+function isSecretLabel(value: string): boolean {
+  const normalizedValue = value.replace(/[^a-z0-9]/gi, "").toLowerCase()
+  return secretLabelFragments.some((fragment) => normalizedValue.includes(fragment))
+}
+
 function redactJsonLikeSecretPairs(value: string): string {
-  return value.replace(secretJsonPairPattern, '$1"[REDACTED]"')
+  return value
+    .replace(secretJsonPairPattern, '$1"[REDACTED]"')
+    .replace(bearerValuePattern, '$1"[REDACTED]"')
+    .replace(authorizationNameValuePairPattern, '$1"$2"$3"[REDACTED]"')
+    .replace(apiKeyHeaderNameValuePairPattern, '$1"$2"$3"[REDACTED]"')
 }
 
 function serializeError(error: unknown): Record<string, unknown> {
@@ -254,10 +295,20 @@ const secretKeyFragments = [
   "authorization",
 ]
 
+const secretLabelFragments = [...secretKeyFragments, "xapikey"]
+
 const secretJsonPairPattern = new RegExp(
   '((?:"[A-Za-z0-9_-]*(?:token|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization)[A-Za-z0-9_-]*"|[A-Za-z0-9_-]*(?:token|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization)[A-Za-z0-9_-]*)\\s*:\\s*)("(?:\\\\.|[^"\\\\])*"|[^,}\\]\\s]+)',
   "gi",
 )
+
+const bearerValuePattern = /((?:"(?:value|headerValue)"|(?:value|headerValue))\s*:\s*)"Bearer\s+[^"]*"/gi
+
+const authorizationNameValuePairPattern =
+  /((?:"name"|name)\s*:\s*)"(Authorization)"(\s*,\s*(?:"value"|value)\s*:\s*)"(?:\\.|[^"\\])*"/gi
+
+const apiKeyHeaderNameValuePairPattern =
+  /((?:"headerName"|headerName)\s*:\s*)"(X-API-Key|API-Key|ApiKey)"(\s*,\s*(?:"headerValue"|headerValue)\s*:\s*)"(?:\\.|[^"\\])*"/gi
 
 const workflowPlanNodeJsonSchema: JsonSchema = {
   type: "object",

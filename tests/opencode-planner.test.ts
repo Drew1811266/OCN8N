@@ -169,6 +169,96 @@ describe("OpencodePlanner", () => {
     expect(promptText).not.toContain("access-secret-value")
   })
 
+  it("redacts authorization bearer values stored under generic header name/value pairs", async () => {
+    const patchPlan = {
+      summary: "Add Slack notification",
+      changes: ["Add Slack node"],
+      replacementPlan: simpleWebhookPlan,
+    }
+    const client = {
+      session: {
+        create: vi.fn(async () => ({ id: "session_1" })),
+        prompt: vi.fn(async (_input: unknown) => ({
+          data: {
+            info: {
+              structured_output: patchPlan,
+            },
+          },
+        })),
+      },
+    }
+    const planner = new OpencodePlanner({ client })
+
+    await planner.createPatchPlan({
+      prompt: "Notify Slack for each order",
+      sdkReference: "Use n8n workflow rules",
+      nodeDocumentation: [],
+      currentWorkflowJson: JSON.stringify({
+        nodes: [
+          {
+            parameters: {
+              headers: [{ name: "Authorization", value: "Bearer real-token" }],
+            },
+          },
+        ],
+      }),
+    })
+
+    const promptInput = client.session.prompt.mock.calls[0]?.[0] as
+      | { body: { parts: Array<{ text: string }> } }
+      | undefined
+    const promptText = promptInput?.body.parts[0]?.text ?? ""
+
+    expect(promptText).toContain("[REDACTED]")
+    expect(promptText).not.toContain("real-token")
+    expect(promptText).not.toContain("Bearer real-token")
+  })
+
+  it("redacts API key header values paired with generic headerName/headerValue fields", async () => {
+    const patchPlan = {
+      summary: "Add Slack notification",
+      changes: ["Add Slack node"],
+      replacementPlan: simpleWebhookPlan,
+    }
+    const client = {
+      session: {
+        create: vi.fn(async () => ({ id: "session_1" })),
+        prompt: vi.fn(async (_input: unknown) => ({
+          data: {
+            info: {
+              structured_output: patchPlan,
+            },
+          },
+        })),
+      },
+    }
+    const planner = new OpencodePlanner({ client })
+
+    await planner.createPatchPlan({
+      prompt: "Notify Slack for each order",
+      sdkReference: "Use n8n workflow rules",
+      nodeDocumentation: [],
+      currentWorkflowJson: JSON.stringify({
+        nodes: [
+          {
+            parameters: {
+              headerName: "X-API-Key",
+              headerValue: "plain-api-key",
+            },
+          },
+        ],
+      }),
+    })
+
+    const promptInput = client.session.prompt.mock.calls[0]?.[0] as
+      | { body: { parts: Array<{ text: string }> } }
+      | undefined
+    const promptText = promptInput?.body.parts[0]?.text ?? ""
+
+    expect(promptText).toContain("[REDACTED]")
+    expect(promptText).not.toContain("plain-api-key")
+  })
+
   it("throws a typed error when OpenCode reports structured planning failure", async () => {
     const client = {
       session: {
