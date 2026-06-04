@@ -7,7 +7,7 @@ export function containsPlaintextSecret(value: unknown): boolean {
 export function isPrivateNetworkUrl(raw: string): boolean {
   try {
     const url = new URL(raw)
-    const host = url.hostname.toLowerCase().replace(/\.$/, "")
+    const host = normalizeUrlHost(url.hostname)
 
     if (host === "localhost" || host === "::1") {
       return true
@@ -28,6 +28,15 @@ export function isPrivateNetworkUrl(raw: string): boolean {
   } catch {
     return false
   }
+}
+
+function normalizeUrlHost(hostname: string): string {
+  const host = hostname.toLowerCase().replace(/\.$/, "")
+  if (host.startsWith("[") && host.endsWith("]")) {
+    return host.slice(1, -1)
+  }
+
+  return host
 }
 
 function scanValue(value: unknown): boolean {

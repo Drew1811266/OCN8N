@@ -50,6 +50,7 @@ describe("security checks", () => {
   it("detects private network URL hosts", () => {
     expect(isPrivateNetworkUrl("http://localhost:5678")).toBe(true)
     expect(isPrivateNetworkUrl("http://127.0.0.1:5678")).toBe(true)
+    expect(isPrivateNetworkUrl("http://[::1]:5678")).toBe(true)
     expect(isPrivateNetworkUrl("http://10.1.2.3/internal")).toBe(true)
     expect(isPrivateNetworkUrl("http://192.168.1.25/api")).toBe(true)
     expect(isPrivateNetworkUrl("http://172.16.0.1/api")).toBe(true)
