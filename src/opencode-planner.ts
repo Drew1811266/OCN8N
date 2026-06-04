@@ -174,6 +174,8 @@ export class OpencodePlanner {
   }
 
   private buildPatchPrompt(context: PatchPlannerContext): string {
+    const redactedCurrentWorkflowJson = redactWorkflowJson(context.currentWorkflowJson)
+
     return [
       "Create a full replacement WorkflowPatchPlan for a managed n8n workflow.",
       "Preserve existing behavior unless the user request changes it.",
@@ -182,13 +184,50 @@ export class OpencodePlanner {
       "",
       `User request:\n${context.prompt}`,
       "",
-      `Current workflow JSON:\n${context.currentWorkflowJson}`,
+      `Current workflow JSON:\n${redactedCurrentWorkflowJson}`,
       "",
       `SDK reference:\n${context.sdkReference}`,
       "",
       `Node documentation:\n${JSON.stringify(context.nodeDocumentation, null, 2)}`,
     ].join("\n")
   }
+}
+
+function redactWorkflowJson(currentWorkflowJson: string): string {
+  try {
+    return JSON.stringify(redactSecretValues(JSON.parse(currentWorkflowJson)), null, 2)
+  } catch {
+    return redactJsonLikeSecretPairs(currentWorkflowJson)
+  }
+}
+
+function redactSecretValues(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactSecretValues)
+  }
+
+  if (!isRecord(value)) {
+    return value
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => {
+      return [key, isSecretKey(key) ? "[REDACTED]" : redactSecretValues(item)]
+    }),
+  )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isSecretKey(key: string): boolean {
+  const normalizedKey = key.replace(/[^a-z0-9]/gi, "").toLowerCase()
+  return secretKeyFragments.some((fragment) => normalizedKey.includes(fragment))
+}
+
+function redactJsonLikeSecretPairs(value: string): string {
+  return value.replace(secretJsonPairPattern, '$1"[REDACTED]"')
 }
 
 function serializeError(error: unknown): Record<string, unknown> {
@@ -203,6 +242,22 @@ function serializeError(error: unknown): Record<string, unknown> {
     message: String(error),
   }
 }
+
+const secretKeyFragments = [
+  "token",
+  "password",
+  "secret",
+  "apikey",
+  "accesstoken",
+  "refreshtoken",
+  "clientsecret",
+  "authorization",
+]
+
+const secretJsonPairPattern = new RegExp(
+  '((?:"[A-Za-z0-9_-]*(?:token|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization)[A-Za-z0-9_-]*"|[A-Za-z0-9_-]*(?:token|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization)[A-Za-z0-9_-]*)\\s*:\\s*)("(?:\\\\.|[^"\\\\])*"|[^,}\\]\\s]+)',
+  "gi",
+)
 
 const workflowPlanNodeJsonSchema: JsonSchema = {
   type: "object",

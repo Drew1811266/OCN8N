@@ -118,6 +118,57 @@ describe("OpencodePlanner", () => {
     })
   })
 
+  it("redacts secret-looking values from current workflow JSON in patch prompts", async () => {
+    const patchPlan = {
+      summary: "Add Slack notification",
+      changes: ["Add Slack node"],
+      replacementPlan: simpleWebhookPlan,
+    }
+    const client = {
+      session: {
+        create: vi.fn(async () => ({ id: "session_1" })),
+        prompt: vi.fn(async (_input: unknown) => ({
+          data: {
+            info: {
+              structured_output: patchPlan,
+            },
+          },
+        })),
+      },
+    }
+    const planner = new OpencodePlanner({ client })
+
+    await planner.createPatchPlan({
+      prompt: "Notify Slack for each order",
+      sdkReference: "Use n8n workflow rules",
+      nodeDocumentation: [],
+      currentWorkflowJson: JSON.stringify({
+        name: "Order webhook",
+        nodes: [
+          {
+            parameters: {
+              token: "token-secret-value",
+              password: "password-secret-value",
+              nested: {
+                accessToken: "access-secret-value",
+              },
+            },
+          },
+        ],
+      }),
+    })
+
+    const promptInput = client.session.prompt.mock.calls[0]?.[0] as
+      | { body: { parts: Array<{ text: string }> } }
+      | undefined
+    const promptText = promptInput?.body.parts[0]?.text ?? ""
+
+    expect(promptText).toContain("[REDACTED]")
+    expect(promptText).not.toContain("token-secret-value")
+    expect(promptText).not.toContain("password-secret-value")
+    expect(promptText).not.toContain("access-secret-value")
+  })
+
   it("throws a typed error when OpenCode reports structured planning failure", async () => {
     const client = {
       session: {

@@ -8,12 +8,13 @@ type McpContent = {
 }
 
 type McpResponse = {
+  id?: string | number | null
   result?: {
     content?: McpContent[]
     [key: string]: unknown
   }
   error?: {
-    code?: number
+    code?: unknown
     message?: unknown
   }
 }
@@ -38,21 +39,15 @@ export class N8nMcpClient {
   }
 
   async searchNodes(query: string): Promise<string> {
-    return this.callTextTool("search_nodes", { query })
+    return this.callTextTool("search_nodes", { queries: [query] })
   }
 
   async getNodeTypes(nodeTypes: string[]): Promise<string> {
-    return this.callTextTool("get_node_types", { nodeTypes })
+    return this.callTextTool("get_node_types", { nodeIds: nodeTypes })
   }
 
   private async callTextTool(name: string, argumentsValue: Record<string, unknown>): Promise<string> {
-    const response = await this.call({
-      method: "tools/call",
-      params: {
-        name,
-        arguments: argumentsValue,
-      },
-    })
+    const response = await this.call(name, argumentsValue)
 
     const text = response.result?.content
       ?.map((item) => item.text)
@@ -66,7 +61,8 @@ export class N8nMcpClient {
     return text
   }
 
-  private async call(payload: { method: "tools/call"; params: Record<string, unknown> }): Promise<McpResponse> {
+  private async call(toolName: string, argumentsValue: Record<string, unknown>): Promise<McpResponse> {
+    const expectedId = String(++this.requestId)
     const response = await this.fetchImpl(this.mcpUrl, {
       method: "POST",
       headers: {
@@ -75,8 +71,12 @@ export class N8nMcpClient {
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
-        id: String(++this.requestId),
-        ...payload,
+        id: expectedId,
+        method: "tools/call",
+        params: {
+          name: toolName,
+          arguments: argumentsValue,
+        },
       }),
     })
 
@@ -95,15 +95,39 @@ export class N8nMcpClient {
       data = (await response.json()) as McpResponse
     } catch {
       throw new N8nBuilderError("n8n MCP returned invalid JSON.", "N8N_MCP_TOOL_ERROR", {
-        method: payload.method,
+        toolName,
+      })
+    }
+
+    if (data.id !== expectedId) {
+      throw new N8nBuilderError("n8n MCP returned a mismatched JSON-RPC response id.", "N8N_MCP_PROTOCOL_ERROR", {
+        expectedId,
+        responseId: sanitizeProtocolId(data.id),
       })
     }
 
     if (data.error) {
-      const message = typeof data.error.message === "string" ? data.error.message : "n8n MCP tool call failed."
-      throw new N8nBuilderError(message, "N8N_MCP_TOOL_ERROR", { method: payload.method })
+      const details: Record<string, unknown> = { toolName }
+      if (typeof data.error.code === "number" || typeof data.error.code === "string") {
+        details.errorCode = data.error.code
+      }
+
+      throw new N8nBuilderError(`n8n MCP tool ${toolName} failed.`, "N8N_MCP_TOOL_ERROR", details)
     }
 
     return data
   }
+}
+
+function sanitizeProtocolId(id: string | number | null | undefined): string | number | null | undefined {
+  if (typeof id !== "string") return id
+
+  return redactSecretFragments(id)
+}
+
+function redactSecretFragments(value: string): string {
+  return value.replace(
+    /\b(token|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)=([^\s,;]+)/gi,
+    "$1=[REDACTED]",
+  )
 }
