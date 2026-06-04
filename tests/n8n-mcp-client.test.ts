@@ -111,6 +111,49 @@ describe("N8nMcpClient", () => {
     })
   })
 
+  it("passes get_node_types discriminator objects through as nodeIds", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: { content: [{ type: "text", text: "Google Sheets docs" }] },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(
+      client.getNodeTypes([
+        {
+          nodeId: "n8n-nodes-base.googleSheets",
+          resource: "sheet",
+          operation: "append",
+        },
+      ]),
+    ).resolves.toBe("Google Sheets docs")
+
+    const requestInit = fetch.mock.calls[0]?.[1] as RequestInit | undefined
+    expect(JSON.parse(requestInit?.body as string)).toEqual({
+      jsonrpc: "2.0",
+      id: "1",
+      method: "tools/call",
+      params: {
+        name: "get_node_types",
+        arguments: {
+          nodeIds: [
+            {
+              nodeId: "n8n-nodes-base.googleSheets",
+              resource: "sheet",
+              operation: "append",
+            },
+          ],
+        },
+      },
+    })
+  })
+
   it("throws a typed tool error for JSON-RPC errors", async () => {
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
       return new Response(

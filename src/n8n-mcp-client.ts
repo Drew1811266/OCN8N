@@ -26,6 +26,16 @@ export type N8nMcpClientOptions = {
   fetch?: FetchLike
 }
 
+export type NodeTypeLookup =
+  | string
+  | {
+      nodeId: string
+      version?: number
+      resource?: string
+      operation?: string
+      mode?: string
+    }
+
 export class N8nMcpClient {
   private requestId = 0
   private readonly mcpUrl: string
@@ -44,7 +54,7 @@ export class N8nMcpClient {
     return this.callTextTool("search_nodes", { queries: [query] })
   }
 
-  async getNodeTypes(nodeTypes: string[]): Promise<string> {
+  async getNodeTypes(nodeTypes: NodeTypeLookup[]): Promise<string> {
     return this.callTextTool("get_node_types", { nodeIds: nodeTypes })
   }
 

@@ -125,4 +125,102 @@ describe("buildWorkflow", () => {
     expect(api.createWorkflow).not.toHaveBeenCalled()
     expect(registry.upsert).not.toHaveBeenCalled()
   })
+
+  it("preserves scoped n8n node ids from MCP search text", async () => {
+    const api = {
+      createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
+    }
+    const registry = { upsert: vi.fn(async () => undefined) }
+    const planner = { createPlan: vi.fn(async () => simpleWebhookPlan) }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "Use the LangChain Agent node @n8n/n8n-nodes-langchain.agent."),
+      getNodeTypes: vi.fn(async () => "agent docs"),
+    }
+
+    await buildWorkflow({
+      args: { prompt: "Build an agent workflow" },
+      config,
+      api,
+      registry,
+      planner,
+      mcp,
+      now: () => new Date("2026-06-04T00:00:00.000Z"),
+    })
+
+    expect(mcp.getNodeTypes).toHaveBeenCalledWith(["@n8n/n8n-nodes-langchain.agent"])
+  })
+
+  it("preserves MCP search JSON node discriminator objects with allowed fields only", async () => {
+    const api = {
+      createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
+    }
+    const registry = { upsert: vi.fn(async () => undefined) }
+    const planner = { createPlan: vi.fn(async () => simpleWebhookPlan) }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(
+        async () =>
+          JSON.stringify([
+            {
+              nodeId: "n8n-nodes-base.googleSheets",
+              version: 4,
+              resource: "sheet",
+              operation: "append",
+              ignored: "not sent",
+            },
+          ]),
+      ),
+      getNodeTypes: vi.fn(async () => "google sheets docs"),
+    }
+
+    await buildWorkflow({
+      args: { prompt: "Append rows to Google Sheets" },
+      config,
+      api,
+      registry,
+      planner,
+      mcp,
+      now: () => new Date("2026-06-04T00:00:00.000Z"),
+    })
+
+    expect(mcp.getNodeTypes).toHaveBeenCalledWith([
+      {
+        nodeId: "n8n-nodes-base.googleSheets",
+        version: 4,
+        resource: "sheet",
+        operation: "append",
+      },
+    ])
+  })
+
+  it("skips node type lookup and plans without node documentation when no node ids match", async () => {
+    const api = {
+      createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
+    }
+    const registry = { upsert: vi.fn(async () => undefined) }
+    const planner = { createPlan: vi.fn(async () => simpleWebhookPlan) }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "No node identifiers in this search result."),
+      getNodeTypes: vi.fn(async () => "unused docs"),
+    }
+
+    await buildWorkflow({
+      args: { prompt: "Build an order webhook" },
+      config,
+      api,
+      registry,
+      planner,
+      mcp,
+      now: () => new Date("2026-06-04T00:00:00.000Z"),
+    })
+
+    expect(mcp.getNodeTypes).not.toHaveBeenCalled()
+    expect(planner.createPlan).toHaveBeenCalledWith({
+      prompt: "Build an order webhook",
+      sdkReference: "SDK rules",
+      nodeDocumentation: [],
+    })
+  })
 })
