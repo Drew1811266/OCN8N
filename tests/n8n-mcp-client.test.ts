@@ -158,6 +158,36 @@ describe("N8nMcpClient", () => {
     expect(JSON.stringify(error)).not.toContain("secret-value")
   })
 
+  it("throws a sanitized typed error for MCP tool-level failures", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: {
+            isError: true,
+            content: [{ type: "text", text: "token=secret-value" }],
+          },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    let error: unknown
+    try {
+      await client.getSdkReference("rules")
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toBeInstanceOf(N8nBuilderError)
+    expect((error as N8nBuilderError).code).toBe("N8N_MCP_TOOL_ERROR")
+    expect((error as N8nBuilderError).message).toBe("n8n MCP tool get_sdk_reference failed.")
+    expect((error as N8nBuilderError).details).toEqual({ toolName: "get_sdk_reference" })
+    expect(JSON.stringify(error)).not.toContain("secret-value")
+  })
+
   it("throws a typed protocol error when JSON-RPC response id mismatches the request id", async () => {
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
       return new Response(

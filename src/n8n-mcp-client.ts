@@ -11,6 +11,7 @@ type McpResponse = {
   id?: string | number | null
   result?: {
     content?: McpContent[]
+    isError?: boolean
     [key: string]: unknown
   }
   error?: {
@@ -48,6 +49,10 @@ export class N8nMcpClient {
 
   private async callTextTool(name: string, argumentsValue: Record<string, unknown>): Promise<string> {
     const response = await this.call(name, argumentsValue)
+
+    if (response.result?.isError === true) {
+      throw new N8nBuilderError(`n8n MCP tool ${name} failed.`, "N8N_MCP_TOOL_ERROR", { toolName: name })
+    }
 
     const text = response.result?.content
       ?.map((item) => item.text)
