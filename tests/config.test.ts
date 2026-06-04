@@ -1,0 +1,75 @@
+import { describe, expect, it } from "vitest"
+import { loadPluginConfig } from "../src/config.js"
+import { N8nBuilderError } from "../src/errors.js"
+
+describe("loadPluginConfig", () => {
+  it("loads required n8n settings from environment", () => {
+    const config = loadPluginConfig({
+      env: {
+        N8N_BASE_URL: "https://demo.app.n8n.cloud/api/v1",
+        N8N_API_KEY: "n8n_api_key",
+        N8N_MCP_URL: "https://demo.app.n8n.cloud/mcp",
+      },
+      opencodeConfig: {},
+      workspaceDir: "/tmp/project",
+    })
+
+    expect(config.baseUrl).toBe("https://demo.app.n8n.cloud/api/v1")
+    expect(config.apiKey).toBe("n8n_api_key")
+    expect(config.mcpUrl).toBe("https://demo.app.n8n.cloud/mcp")
+    expect(config.workspaceDir).toBe("/tmp/project")
+    expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
+  })
+
+  it("loads credential mappings from OpenCode config", () => {
+    const config = loadPluginConfig({
+      env: {
+        N8N_BASE_URL: "https://demo.app.n8n.cloud/api/v1",
+        N8N_API_KEY: "n8n_api_key",
+        N8N_MCP_URL: "https://demo.app.n8n.cloud/mcp",
+      },
+      workspaceDir: "/tmp/project",
+      opencodeConfig: {
+        n8n: {
+          credentialEnv: {
+            slackApi: {
+              name: "OpenCode Slack",
+              type: "slackApi",
+              env: { accessToken: "SLACK_BOT_TOKEN" },
+            },
+          },
+        },
+      },
+    })
+
+    expect(config.credentialEnv.slackApi.name).toBe("OpenCode Slack")
+    expect(config.credentialEnv.slackApi.env.accessToken).toBe("SLACK_BOT_TOKEN")
+  })
+
+  it("throws a typed config error when required settings are missing", () => {
+    expect(() =>
+      loadPluginConfig({
+        env: {},
+        opencodeConfig: {},
+        workspaceDir: "/tmp/project",
+      }),
+    ).toThrow(N8nBuilderError)
+
+    try {
+      loadPluginConfig({
+        env: {},
+        opencodeConfig: {},
+        workspaceDir: "/tmp/project",
+      })
+    } catch (error) {
+      expect(error).toBeInstanceOf(N8nBuilderError)
+      expect((error as N8nBuilderError).code).toBe("CONFIG_MISSING")
+      expect((error as N8nBuilderError).message).toBe(
+        "Missing required n8n configuration: N8N_BASE_URL, N8N_API_KEY, N8N_MCP_URL",
+      )
+      expect((error as N8nBuilderError).details).toEqual({
+        missing: ["N8N_BASE_URL", "N8N_API_KEY", "N8N_MCP_URL"],
+      })
+    }
+  })
+})
