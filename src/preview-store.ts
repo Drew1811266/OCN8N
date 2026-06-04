@@ -17,6 +17,8 @@ export type UpdatePreview = {
 
 export type SaveUpdatePreviewInput = Omit<UpdatePreview, "previewId">
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 export class PreviewStore {
   constructor(private readonly directory: string) {}
 
@@ -30,15 +32,24 @@ export class PreviewStore {
   }
 
   async get(previewId: string, now = new Date()): Promise<UpdatePreview | undefined> {
+    if (!uuidPattern.test(previewId)) {
+      return undefined
+    }
+
     try {
       const raw = await readFile(this.filePath(previewId), "utf8")
-      const preview = JSON.parse(raw) as UpdatePreview
+      const parsed: unknown = JSON.parse(raw)
 
-      if (new Date(preview.expiresAt).getTime() <= now.getTime()) {
+      if (!isUpdatePreview(parsed)) {
         return undefined
       }
 
-      return preview
+      const expiresAt = Date.parse(parsed.expiresAt)
+      if (Number.isNaN(expiresAt) || expiresAt <= now.getTime()) {
+        return undefined
+      }
+
+      return parsed
     } catch {
       return undefined
     }
@@ -47,4 +58,38 @@ export class PreviewStore {
   private filePath(previewId: string): string {
     return path.join(this.directory, `${previewId}.json`)
   }
+}
+
+function isUpdatePreview(value: unknown): value is UpdatePreview {
+  if (!isRecord(value)) {
+    return false
+  }
+
+  return (
+    typeof value.previewId === "string" &&
+    typeof value.workflowId === "string" &&
+    typeof value.baseWorkflowHash === "string" &&
+    typeof value.proposedWorkflowHash === "string" &&
+    typeof value.summary === "string" &&
+    Array.isArray(value.changes) &&
+    value.changes.every((change) => typeof change === "string") &&
+    isN8nWorkflowShape(value.proposedWorkflow) &&
+    typeof value.createdAt === "string" &&
+    typeof value.expiresAt === "string"
+  )
+}
+
+function isN8nWorkflowShape(value: unknown): value is N8nWorkflow {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    typeof value.active === "boolean" &&
+    Array.isArray(value.nodes) &&
+    isRecord(value.connections) &&
+    isRecord(value.settings)
+  )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

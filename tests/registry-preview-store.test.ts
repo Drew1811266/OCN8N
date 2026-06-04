@@ -60,6 +60,18 @@ describe("WorkflowRegistry", () => {
     ])
   })
 
+  it("sorts same-name records by workflowId and replaces records idempotently", async () => {
+    const registry = new WorkflowRegistry(registryPath())
+
+    await registry.upsert(registryRecord({ workflowId: "wf_b", name: "Orders" }))
+    await registry.upsert(registryRecord({ workflowId: "wf_c", name: "Orders", lastPlanHash: "old" }))
+    await registry.upsert(registryRecord({ workflowId: "wf_a", name: "Orders" }))
+    await registry.upsert(registryRecord({ workflowId: "wf_c", name: "Orders", lastPlanHash: "new" }))
+
+    expect((await registry.list()).map((record) => record.workflowId)).toEqual(["wf_a", "wf_b", "wf_c"])
+    expect((await registry.list()).map((record) => record.lastPlanHash)).toEqual(["abc", "abc", "new"])
+  })
+
   it("reads missing or malformed registry files as empty", async () => {
     const registry = new WorkflowRegistry(registryPath())
     expect(await registry.list()).toEqual([])
@@ -110,6 +122,68 @@ describe("PreviewStore", () => {
     )
     expect(raw.endsWith("\n")).toBe(true)
     expect(JSON.parse(raw).proposedWorkflow).toEqual(proposedWorkflow)
+  })
+
+  it("returns undefined for traversal-like preview IDs without throwing", async () => {
+    const store = new PreviewStore(path.join(dir, ".opencode", "n8n-update-previews"))
+    await writeFile(
+      path.join(dir, "outside.json"),
+      JSON.stringify({
+        previewId: "123e4567-e89b-12d3-a456-426614174000",
+        workflowId: "wf_1",
+        baseWorkflowHash: "base",
+        proposedWorkflowHash: "proposed",
+        summary: "Outside preview",
+        changes: ["Outside preview"],
+        proposedWorkflow: {
+          name: simpleWebhookPlan.name,
+          active: false,
+          nodes: [],
+          connections: {},
+          settings: {},
+        },
+        createdAt: "2026-06-04T00:00:00.000Z",
+        expiresAt: "2026-06-04T00:30:00.000Z",
+      }),
+      "utf8",
+    )
+
+    await expect(store.get("../../outside", new Date("2026-06-04T00:10:00.000Z"))).resolves.toBeUndefined()
+  })
+
+  it("returns undefined for malformed preview files", async () => {
+    const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
+    const store = new PreviewStore(previewDir)
+    const validUuid = "123e4567-e89b-12d3-a456-426614174000"
+
+    await mkdir(previewDir, { recursive: true })
+    await writeFile(path.join(previewDir, `${validUuid}.json`), JSON.stringify({}), "utf8")
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
+
+    await writeFile(
+      path.join(previewDir, `${validUuid}.json`),
+      JSON.stringify({
+        previewId: validUuid,
+        workflowId: "wf_1",
+        baseWorkflowHash: "base",
+        proposedWorkflowHash: "proposed",
+        summary: "Add Slack node",
+        changes: ["Add Slack node"],
+        proposedWorkflow: {
+          name: simpleWebhookPlan.name,
+          active: false,
+          nodes: [],
+          connections: {},
+          settings: {},
+        },
+        createdAt: "2026-06-04T00:00:00.000Z",
+        expiresAt: "not-a-date",
+      }),
+      "utf8",
+    )
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
   })
 
   it("returns undefined for missing or expired previews", async () => {

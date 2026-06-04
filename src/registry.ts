@@ -31,7 +31,9 @@ export class WorkflowRegistry {
     const file = await this.read()
     const workflows = file.workflows.filter((item) => item.workflowId !== record.workflowId)
     workflows.push(record)
-    workflows.sort((a, b) => a.name.localeCompare(b.name))
+    workflows.sort(
+      (a, b) => a.name.localeCompare(b.name) || a.workflowId.localeCompare(b.workflowId),
+    )
 
     await this.write({ workflows })
   }
