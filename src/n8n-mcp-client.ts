@@ -55,8 +55,12 @@ export class N8nMcpClient {
       throw new N8nBuilderError(`n8n MCP tool ${name} failed.`, "N8N_MCP_TOOL_ERROR", { toolName: name })
     }
 
-    const text = response.result?.content
-      ?.map((item) => item.text)
+    const content = validateMcpContent(response.result?.content)
+    const text = content
+      .filter((item): item is McpContent & { type: "text"; text: string } => {
+        return item.type === "text" && typeof item.text === "string"
+      })
+      .map((item) => item.text)
       .filter((value): value is string => typeof value === "string")
       .join("\n")
 
@@ -125,6 +129,24 @@ export class N8nMcpClient {
 
     return mcpResponse
   }
+}
+
+function validateMcpContent(content: unknown): McpContent[] {
+  if (!Array.isArray(content)) {
+    throwProtocolError("invalid_content")
+  }
+
+  if (!content.every(isRecord)) {
+    throwProtocolError("invalid_content_item")
+  }
+
+  for (const item of content) {
+    if (Object.hasOwn(item, "type") && typeof item.type !== "string") {
+      throwProtocolError("invalid_content_type")
+    }
+  }
+
+  return content
 }
 
 function parseMcpResponse(value: unknown): McpResponse {

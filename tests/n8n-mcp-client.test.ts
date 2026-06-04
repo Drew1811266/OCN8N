@@ -375,6 +375,49 @@ describe("N8nMcpClient", () => {
     expect((error as N8nBuilderError).details).toEqual({ expectedId: "1", responseId: "unexpected" })
   })
 
+  it("throws a typed protocol error when MCP content is not an array", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({ jsonrpc: "2.0", id: "1", result: { content: "SDK docs" } }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.getSdkReference("rules")).rejects.toMatchObject({
+      code: "N8N_MCP_PROTOCOL_ERROR",
+    })
+  })
+
+  it("throws a typed protocol error when MCP content contains null", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: "1", result: { content: [null] } }), { status: 200 })
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.getSdkReference("rules")).rejects.toMatchObject({
+      code: "N8N_MCP_PROTOCOL_ERROR",
+    })
+  })
+
+  it("throws a typed empty error when MCP content has no text items", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: { content: [{ type: "image", data: "abc123" }] },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.getSdkReference("rules")).rejects.toMatchObject({
+      code: "N8N_MCP_EMPTY",
+    })
+  })
+
   it("throws a typed empty error when MCP returns no text content", async () => {
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
       return new Response(JSON.stringify({ jsonrpc: "2.0", id: "1", result: { content: [] } }), { status: 200 })
