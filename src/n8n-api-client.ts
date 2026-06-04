@@ -21,6 +21,8 @@ type N8nApiClientOptions = {
   fetch?: FetchLike
 }
 
+const credentialListExpected = "N8nCredentialSummary[] or { data: N8nCredentialSummary[], nextCursor?: string }"
+
 export class N8nApiClient {
   private readonly baseUrl: string
   private readonly apiKey: string
@@ -53,12 +55,40 @@ export class N8nApiClient {
   }
 
   async listCredentials(): Promise<N8nCredentialSummary[]> {
-    const response = await this.request<N8nCredentialSummary[] | { data?: N8nCredentialSummary[] }>("/credentials", {
-      method: "GET",
-    })
+    const credentials: N8nCredentialSummary[] = []
+    let cursor: string | undefined
 
-    if (Array.isArray(response)) return response
-    return response.data ?? []
+    do {
+      const path = cursor ? `/credentials?${new URLSearchParams({ cursor }).toString()}` : "/credentials"
+      let response: unknown
+
+      try {
+        response = await this.request<unknown>(path, { method: "GET" })
+      } catch (error) {
+        if (error instanceof N8nBuilderError && error.code === "N8N_API_PARSE_ERROR") {
+          throwCredentialListParseError(path)
+        }
+
+        throw error
+      }
+
+      if (Array.isArray(response)) {
+        if (!response.every(isN8nCredentialSummary)) {
+          throwCredentialListParseError(path)
+        }
+
+        return [...credentials, ...response]
+      }
+
+      if (!isCredentialListPage(response)) {
+        throwCredentialListParseError(path)
+      }
+
+      credentials.push(...response.data)
+      cursor = response.nextCursor
+    } while (cursor)
+
+    return credentials
   }
 
   async createCredential(input: CreateCredentialInput): Promise<N8nCredentialSummary> {
@@ -89,6 +119,39 @@ export class N8nApiClient {
       )
     }
 
-    return (await response.json()) as T
+    try {
+      return (await response.json()) as T
+    } catch {
+      throw new N8nBuilderError("n8n API returned invalid JSON.", "N8N_API_PARSE_ERROR", { path })
+    }
   }
+}
+
+function isN8nCredentialSummary(value: unknown): value is N8nCredentialSummary {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+  const credential = value as Record<string, unknown>
+  return (
+    typeof credential.id === "string" &&
+    typeof credential.name === "string" &&
+    typeof credential.type === "string"
+  )
+}
+
+function isCredentialListPage(value: unknown): value is { data: N8nCredentialSummary[]; nextCursor?: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+  const page = value as Record<string, unknown>
+  return (
+    Array.isArray(page.data) &&
+    page.data.every(isN8nCredentialSummary) &&
+    (page.nextCursor === undefined || typeof page.nextCursor === "string")
+  )
+}
+
+function throwCredentialListParseError(path: string): never {
+  throw new N8nBuilderError("n8n API returned an invalid credentials response.", "N8N_API_PARSE_ERROR", {
+    path,
+    expected: credentialListExpected,
+  })
 }

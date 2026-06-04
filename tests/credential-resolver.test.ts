@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { CredentialResolver } from "../src/credential-resolver.js"
+import { N8nBuilderError } from "../src/errors.js"
+import type { N8nCredentialSummary } from "../src/n8n-api-client.js"
 
 describe("CredentialResolver", () => {
   it("reuses an existing named credential by type and configured name", async () => {
@@ -59,7 +61,7 @@ describe("CredentialResolver", () => {
     expect(api.createCredential).not.toHaveBeenCalled()
   })
 
-  it("reports a credential gap when no mapping is configured", async () => {
+  it("reports a credential gap without listing credentials when no mapping is configured", async () => {
     const api = {
       listCredentials: vi.fn(async () => []),
       createCredential: vi.fn(),
@@ -79,6 +81,7 @@ describe("CredentialResolver", () => {
         reason: "No credential mapping configured for this credential type.",
       },
     })
+    expect(api.listCredentials).not.toHaveBeenCalled()
     expect(api.createCredential).not.toHaveBeenCalled()
   })
 
@@ -111,5 +114,40 @@ describe("CredentialResolver", () => {
     })
     expect(result).toEqual({ reference: { id: "cred_1", name: "OpenCode Slack" } })
     expect(JSON.stringify(result)).not.toContain("xoxb-secret")
+  })
+
+  it("throws a redacted error when credential creation returns malformed data", async () => {
+    const api = {
+      listCredentials: vi.fn(async () => []),
+      createCredential: vi.fn(async () => {
+        return { id: "cred_1", name: "OpenCode Slack", token: "xoxb-secret" } as unknown as N8nCredentialSummary
+      }),
+    }
+    const resolver = new CredentialResolver({
+      api,
+      env: { SLACK_BOT_TOKEN: "xoxb-secret" },
+      credentialEnv: {
+        slackApi: {
+          name: "OpenCode Slack",
+          type: "slackApi",
+          env: { accessToken: "SLACK_BOT_TOKEN" },
+        },
+      },
+    })
+
+    let error: unknown
+    try {
+      await resolver.resolve({ nodeName: "Slack", credentialType: "slackApi" })
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toBeInstanceOf(N8nBuilderError)
+    expect((error as N8nBuilderError).code).toBe("CREDENTIAL_CREATE_INVALID")
+    expect((error as N8nBuilderError).details).toEqual({
+      credentialType: "slackApi",
+      credentialName: "OpenCode Slack",
+    })
+    expect(JSON.stringify(error)).not.toContain("xoxb-secret")
   })
 })

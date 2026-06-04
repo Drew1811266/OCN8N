@@ -1,3 +1,4 @@
+import { N8nBuilderError } from "./errors.js"
 import type { N8nCredentialSummary } from "./n8n-api-client.js"
 import type { CredentialEnvMapping, CredentialGap, Env } from "./types.js"
 
@@ -34,18 +35,6 @@ export class CredentialResolver {
 
   async resolve(input: ResolveCredentialInput): Promise<ResolveCredentialResult> {
     const mapping = this.options.credentialEnv[input.credentialType]
-    const credentials = await this.options.api.listCredentials()
-
-    if (mapping) {
-      const existing = credentials.find((credential) => {
-        return credential.type === mapping.type && credential.name === mapping.name
-      })
-
-      if (existing) {
-        return { reference: { id: existing.id, name: existing.name } }
-      }
-    }
-
     if (!mapping) {
       return {
         gap: {
@@ -54,6 +43,15 @@ export class CredentialResolver {
           reason: "No credential mapping configured for this credential type.",
         },
       }
+    }
+
+    const credentials = await this.options.api.listCredentials()
+    const existing = credentials.find((credential) => {
+      return credential.type === mapping.type && credential.name === mapping.name
+    })
+
+    if (existing) {
+      return { reference: { id: existing.id, name: existing.name } }
     }
 
     const envData = resolveEnvData(mapping, this.options.env)
@@ -74,8 +72,26 @@ export class CredentialResolver {
       data: envData.data,
     })
 
+    if (!isN8nCredentialSummary(created)) {
+      throw new N8nBuilderError("n8n API returned an invalid credential creation response.", "CREDENTIAL_CREATE_INVALID", {
+        credentialType: input.credentialType,
+        credentialName: mapping.name,
+      })
+    }
+
     return { reference: { id: created.id, name: created.name } }
   }
+}
+
+function isN8nCredentialSummary(value: unknown): value is N8nCredentialSummary {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+  const credential = value as Record<string, unknown>
+  return (
+    typeof credential.id === "string" &&
+    typeof credential.name === "string" &&
+    typeof credential.type === "string"
+  )
 }
 
 function resolveEnvData(
