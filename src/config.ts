@@ -20,9 +20,100 @@ type OpencodeN8nConfig = {
   }
 }
 
+type PlainRecord = Record<string, unknown>
+
+const optionalStringFields = ["baseUrl", "apiKey", "mcpUrl", "projectId", "folderId"] as const
+
+function isPlainObject(value: unknown): value is PlainRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+function throwInvalidConfig(field: string, reason: string): never {
+  throw new N8nBuilderError(`Invalid n8n configuration: ${field} ${reason}.`, "CONFIG_INVALID", {
+    field,
+    reason,
+  })
+}
+
+function readOptionalString(value: PlainRecord, field: (typeof optionalStringFields)[number]): string | undefined {
+  const fieldValue = value[field]
+  if (fieldValue === undefined) return undefined
+  if (typeof fieldValue !== "string") {
+    throwInvalidConfig(`n8n.${field}`, "must be a string")
+  }
+
+  return fieldValue
+}
+
+function readCredentialEnvMapping(id: string, value: unknown): CredentialEnvMapping {
+  const field = `n8n.credentialEnv.${id}`
+  if (!isPlainObject(value)) {
+    throwInvalidConfig(field, "must be an object")
+  }
+
+  if (typeof value.name !== "string") {
+    throwInvalidConfig(`${field}.name`, "must be a string")
+  }
+
+  if (typeof value.type !== "string") {
+    throwInvalidConfig(`${field}.type`, "must be a string")
+  }
+
+  if (!isPlainObject(value.env)) {
+    throwInvalidConfig(`${field}.env`, "must be an object")
+  }
+
+  const env: Record<string, string> = {}
+  for (const [envField, envValue] of Object.entries(value.env)) {
+    if (typeof envValue !== "string") {
+      throwInvalidConfig(`${field}.env.${envField}`, "must be a string")
+    }
+
+    env[envField] = envValue
+  }
+
+  return {
+    name: value.name,
+    type: value.type,
+    env,
+  }
+}
+
+function readCredentialEnv(value: unknown): Record<string, CredentialEnvMapping> {
+  if (value === undefined) return {}
+  if (!isPlainObject(value)) {
+    throwInvalidConfig("n8n.credentialEnv", "must be an object")
+  }
+
+  const credentialEnv: Record<string, CredentialEnvMapping> = {}
+  for (const [id, mapping] of Object.entries(value)) {
+    credentialEnv[id] = readCredentialEnvMapping(id, mapping)
+  }
+
+  return credentialEnv
+}
+
 function asOpencodeN8nConfig(value: unknown): OpencodeN8nConfig {
   if (!value || typeof value !== "object") return {}
-  return value as OpencodeN8nConfig
+  const n8n = (value as Record<string, unknown>).n8n
+  if (n8n === undefined) return {}
+  if (!isPlainObject(n8n)) {
+    throwInvalidConfig("n8n", "must be a plain object")
+  }
+
+  return {
+    n8n: {
+      baseUrl: readOptionalString(n8n, "baseUrl"),
+      apiKey: readOptionalString(n8n, "apiKey"),
+      mcpUrl: readOptionalString(n8n, "mcpUrl"),
+      credentialEnv: readCredentialEnv(n8n.credentialEnv),
+      projectId: readOptionalString(n8n, "projectId"),
+      folderId: readOptionalString(n8n, "folderId"),
+    },
+  }
 }
 
 export function loadPluginConfig(input: LoadPluginConfigInput): PluginConfig {

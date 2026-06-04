@@ -2,14 +2,31 @@ import { describe, expect, it } from "vitest"
 import { loadPluginConfig } from "../src/config.js"
 import { N8nBuilderError } from "../src/errors.js"
 
+const requiredEnv = {
+  N8N_BASE_URL: "https://demo.app.n8n.cloud/api/v1",
+  N8N_API_KEY: "n8n_api_key",
+  N8N_MCP_URL: "https://demo.app.n8n.cloud/mcp",
+}
+
+function captureConfigError(opencodeConfig: unknown): N8nBuilderError {
+  try {
+    loadPluginConfig({
+      env: requiredEnv,
+      opencodeConfig,
+      workspaceDir: "/tmp/project",
+    })
+  } catch (error) {
+    expect(error).toBeInstanceOf(N8nBuilderError)
+    return error as N8nBuilderError
+  }
+
+  throw new Error("Expected loadPluginConfig to throw")
+}
+
 describe("loadPluginConfig", () => {
   it("loads required n8n settings from environment", () => {
     const config = loadPluginConfig({
-      env: {
-        N8N_BASE_URL: "https://demo.app.n8n.cloud/api/v1",
-        N8N_API_KEY: "n8n_api_key",
-        N8N_MCP_URL: "https://demo.app.n8n.cloud/mcp",
-      },
+      env: requiredEnv,
       opencodeConfig: {},
       workspaceDir: "/tmp/project",
     })
@@ -23,11 +40,7 @@ describe("loadPluginConfig", () => {
 
   it("loads credential mappings from OpenCode config", () => {
     const config = loadPluginConfig({
-      env: {
-        N8N_BASE_URL: "https://demo.app.n8n.cloud/api/v1",
-        N8N_API_KEY: "n8n_api_key",
-        N8N_MCP_URL: "https://demo.app.n8n.cloud/mcp",
-      },
+      env: requiredEnv,
       workspaceDir: "/tmp/project",
       opencodeConfig: {
         n8n: {
@@ -71,5 +84,36 @@ describe("loadPluginConfig", () => {
         missing: ["N8N_BASE_URL", "N8N_API_KEY", "N8N_MCP_URL"],
       })
     }
+  })
+
+  it("throws a typed config error when n8n config is malformed", () => {
+    const error = captureConfigError({ n8n: "bad" })
+
+    expect(error.code).toBe("CONFIG_INVALID")
+    expect(error.details).toMatchObject({ field: "n8n" })
+  })
+
+  it("throws a typed config error when string overrides are malformed", () => {
+    const error = captureConfigError({ n8n: { baseUrl: 123 } })
+
+    expect(error.code).toBe("CONFIG_INVALID")
+    expect(error.details).toMatchObject({ field: "n8n.baseUrl" })
+  })
+
+  it("throws a typed config error when credential mappings are malformed", () => {
+    const error = captureConfigError({
+      n8n: {
+        credentialEnv: {
+          slackApi: {
+            name: "OpenCode Slack",
+            type: "slackApi",
+            env: { accessToken: 123 },
+          },
+        },
+      },
+    })
+
+    expect(error.code).toBe("CONFIG_INVALID")
+    expect(error.details).toMatchObject({ field: "n8n.credentialEnv.slackApi.env.accessToken" })
   })
 })
