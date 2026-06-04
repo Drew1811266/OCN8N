@@ -321,6 +321,125 @@ describe("PreviewStore", () => {
     expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
   })
 
+  it("returns undefined when preview workflow id is malformed", async () => {
+    const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
+    const store = new PreviewStore(previewDir)
+    const validUuid = "123e4567-e89b-12d3-a456-426614174000"
+
+    await mkdir(previewDir, { recursive: true })
+    await writeFile(
+      path.join(previewDir, `${validUuid}.json`),
+      JSON.stringify(
+        previewEnvelope({
+          proposedWorkflow: {
+            id: 123,
+            name: simpleWebhookPlan.name,
+            active: false,
+            nodes: [],
+            connections: {},
+            settings: {},
+          },
+        }),
+      ),
+      "utf8",
+    )
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
+  })
+
+  it("returns undefined when preview workflow node id is malformed", async () => {
+    const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
+    const store = new PreviewStore(previewDir)
+    const validUuid = "123e4567-e89b-12d3-a456-426614174000"
+
+    await mkdir(previewDir, { recursive: true })
+    await writeFile(
+      path.join(previewDir, `${validUuid}.json`),
+      JSON.stringify(
+        previewEnvelope({
+          proposedWorkflow: {
+            name: simpleWebhookPlan.name,
+            active: false,
+            nodes: [
+              {
+                id: 123,
+                name: "Receive",
+                type: "n8n-nodes-base.webhook",
+                typeVersion: 2,
+                position: [0, 0],
+                parameters: {},
+              },
+            ],
+            connections: {},
+            settings: {},
+          },
+        }),
+      ),
+      "utf8",
+    )
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
+  })
+
+  it("returns undefined when preview workflow meta is malformed", async () => {
+    const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
+    const store = new PreviewStore(previewDir)
+    const validUuid = "123e4567-e89b-12d3-a456-426614174000"
+
+    await mkdir(previewDir, { recursive: true })
+    await writeFile(
+      path.join(previewDir, `${validUuid}.json`),
+      JSON.stringify(
+        previewEnvelope({
+          proposedWorkflow: {
+            name: simpleWebhookPlan.name,
+            active: false,
+            nodes: [],
+            connections: {},
+            settings: {},
+            meta: "bad",
+          },
+        }),
+      ),
+      "utf8",
+    )
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
+  })
+
+  it("returns valid previews with optional workflow and node fields", async () => {
+    const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
+    const store = new PreviewStore(previewDir)
+    const validUuid = "123e4567-e89b-12d3-a456-426614174000"
+    const preview = previewEnvelope({
+      proposedWorkflow: {
+        id: "wf_1",
+        name: simpleWebhookPlan.name,
+        active: false,
+        nodes: [
+          {
+            id: "node_1",
+            name: "Send Slack Alert",
+            type: "n8n-nodes-base.slack",
+            typeVersion: 2,
+            position: [0, 0],
+            parameters: {},
+            credentials: { slackApi: { id: "cred_1", name: "OpenCode Slack" } },
+          },
+        ],
+        connections: {},
+        settings: {},
+        tags: ["opencode-n8n-builder", { name: "draft" }],
+        meta: { managedBy: "opencode-n8n-builder" },
+      },
+    })
+
+    await mkdir(previewDir, { recursive: true })
+    await writeFile(path.join(previewDir, `${validUuid}.json`), JSON.stringify(preview), "utf8")
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toEqual(preview)
+  })
+
   it("returns undefined for missing or expired previews", async () => {
     const store = new PreviewStore(path.join(dir, ".opencode", "n8n-update-previews"))
 
