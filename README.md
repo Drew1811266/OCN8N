@@ -36,19 +36,19 @@ Add the plugin to your OpenCode config and provide n8n connection settings:
 }
 ```
 
-Required environment variables:
+Environment variables:
 
 - `N8N_API_KEY`: n8n API key used for REST API calls.
 - `N8N_BASE_URL`: n8n REST API base URL, for example `https://your-instance.app.n8n.cloud/api/v1`.
-- `N8N_MCP_URL`: n8n MCP endpoint URL.
+- `N8N_MCP_URL`: n8n MCP endpoint URL used when building workflows or previewing updates.
+
+`N8N_BASE_URL` and `N8N_API_KEY` are required for workflow inspection, build, update preview, and update apply. `N8N_MCP_URL` is required for build and update preview. `n8n_list_managed_workflows` reads only the local workspace registry and does not require n8n connection settings.
 
 `N8N_BASE_URL` and `N8N_MCP_URL` can be set either in the environment or in OpenCode config as `n8n.baseUrl` and `n8n.mcpUrl`. `N8N_API_KEY` can also be provided as `n8n.apiKey`, but using the environment is preferred for local secret handling.
 
 Optional config:
 
 - `n8n.credentialEnv`: maps credential types to n8n credential names and local environment variables.
-- `n8n.projectId`: default n8n project ID for future project-aware workflow creation.
-- `n8n.folderId`: default n8n folder ID for future folder-aware workflow creation.
 
 ## Tools
 
@@ -60,8 +60,6 @@ Arguments:
 
 - `prompt` (required): natural-language workflow request.
 - `name` (optional): workflow name override.
-- `projectId` (optional): n8n project ID.
-- `folderId` (optional): n8n folder ID.
 
 ### `n8n_update_workflow`
 
@@ -96,6 +94,16 @@ Updates are two-stage by default:
 2. `apply` reloads the current workflow, verifies it still matches the preview base hash, revalidates the proposed workflow, and then updates n8n.
 
 The plugin refuses to update workflows that are not marked as managed by `opencode-n8n-builder`. This prevents accidental edits to arbitrary n8n workflows and protects changes made directly in the n8n UI from stale preview application.
+
+## Credential Resolution
+
+When a planned node references a credential type, the plugin checks `n8n.credentialEnv` during workflow build and update preview:
+
+- If a matching n8n credential already exists by configured type and name, the workflow stores that credential reference.
+- If no matching credential exists and all mapped environment variables are present, the plugin creates the n8n credential and stores the returned reference.
+- If the mapping is missing or required environment variables are absent, the draft or preview is still created and the tool result includes `missingCredentials`.
+
+OAuth authorization remains a manual n8n UI flow. The plugin does not complete OAuth consent or return secret values.
 
 ## Secret Policy
 

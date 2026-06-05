@@ -22,6 +22,19 @@ type OpencodeN8nConfig = {
 
 type PlainRecord = Record<string, unknown>
 
+export type LocalPluginConfig = Pick<
+  PluginConfig,
+  | "workspaceDir"
+  | "registryPath"
+  | "previewDir"
+  | "credentialEnv"
+  | "defaultProjectId"
+  | "defaultFolderId"
+  | "pluginVersion"
+>
+
+export type ApiPluginConfig = Omit<PluginConfig, "mcpUrl">
+
 const optionalStringFields = ["baseUrl", "apiKey", "mcpUrl", "projectId", "folderId"] as const
 
 function isPlainObject(value: unknown): value is PlainRecord {
@@ -124,26 +137,51 @@ export function loadPluginConfig(input: LoadPluginConfigInput): PluginConfig {
   const apiKey = n8n.apiKey ?? input.env.N8N_API_KEY
   const mcpUrl = n8n.mcpUrl ?? input.env.N8N_MCP_URL
 
-  const missing = [
+  requireConfigValues([
     ["N8N_BASE_URL", baseUrl],
     ["N8N_API_KEY", apiKey],
     ["N8N_MCP_URL", mcpUrl],
-  ]
-    .filter(([, value]) => !value)
-    .map(([name]) => name)
-
-  if (missing.length > 0) {
-    throw new N8nBuilderError(
-      `Missing required n8n configuration: ${missing.join(", ")}`,
-      "CONFIG_MISSING",
-      { missing },
-    )
-  }
+  ])
 
   return {
+    ...localConfigFromInput(input, n8n),
     baseUrl: baseUrl as string,
     apiKey: apiKey as string,
     mcpUrl: mcpUrl as string,
+  }
+}
+
+export function loadApiPluginConfig(input: LoadPluginConfigInput): ApiPluginConfig {
+  const opencode = asOpencodeN8nConfig(input.opencodeConfig)
+  const n8n = opencode.n8n ?? {}
+
+  const baseUrl = n8n.baseUrl ?? input.env.N8N_BASE_URL
+  const apiKey = n8n.apiKey ?? input.env.N8N_API_KEY
+
+  requireConfigValues([
+    ["N8N_BASE_URL", baseUrl],
+    ["N8N_API_KEY", apiKey],
+  ])
+
+  return {
+    ...localConfigFromInput(input, n8n),
+    baseUrl: baseUrl as string,
+    apiKey: apiKey as string,
+  }
+}
+
+export function loadLocalPluginConfig(input: LoadPluginConfigInput): LocalPluginConfig {
+  const opencode = asOpencodeN8nConfig(input.opencodeConfig)
+  const n8n = opencode.n8n ?? {}
+
+  return localConfigFromInput(input, n8n)
+}
+
+function localConfigFromInput(
+  input: LoadPluginConfigInput,
+  n8n: NonNullable<OpencodeN8nConfig["n8n"]>,
+): LocalPluginConfig {
+  return {
     workspaceDir: input.workspaceDir,
     registryPath: path.join(input.workspaceDir, ".opencode", "n8n-workflows.json"),
     previewDir: path.join(input.workspaceDir, ".opencode", "n8n-update-previews"),
@@ -151,5 +189,17 @@ export function loadPluginConfig(input: LoadPluginConfigInput): PluginConfig {
     defaultProjectId: n8n.projectId,
     defaultFolderId: n8n.folderId,
     pluginVersion: input.pluginVersion ?? "0.1.0",
+  }
+}
+
+function requireConfigValues(values: Array<[string, string | undefined]>): void {
+  const missing = values.filter(([, value]) => !value).map(([name]) => name)
+
+  if (missing.length > 0) {
+    throw new N8nBuilderError(
+      `Missing required n8n configuration: ${missing.join(", ")}`,
+      "CONFIG_MISSING",
+      { missing },
+    )
   }
 }

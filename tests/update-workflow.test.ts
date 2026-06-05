@@ -117,6 +117,78 @@ describe("updateWorkflow", () => {
     })
   })
 
+  it("resolves credential references in preview workflows before saving the preview", async () => {
+    const resolvedProposedWorkflow: N8nWorkflow = {
+      ...proposedWorkflow,
+      nodes: proposedWorkflow.nodes.map((node) =>
+        node.name === "Send Slack Alert"
+          ? {
+              ...node,
+              credentials: {
+                slackApi: {
+                  id: "cred_1",
+                  name: "OpenCode Slack",
+                },
+              },
+            }
+          : node,
+      ),
+    }
+    const api = {
+      getWorkflow: vi.fn(async () => currentWorkflow),
+      updateWorkflow: vi.fn(),
+    }
+    const planner = {
+      createPatchPlan: vi.fn(async () => ({
+        summary: "Add Slack notification",
+        changes: ["Add Slack node"],
+        replacementPlan: simpleWebhookPlan,
+      })),
+    }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "Slack node: n8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "Slack schema"),
+    }
+    const previewStore = {
+      save: vi.fn(async (preview) => ({
+        previewId: "preview_1",
+        ...preview,
+      })),
+    }
+    const credentialResolver = {
+      resolve: vi.fn(async () => ({
+        reference: {
+          id: "cred_1",
+          name: "OpenCode Slack",
+        },
+      })),
+    }
+
+    const result = await updateWorkflow({
+      args: { workflowId: "wf_1", mode: "preview", prompt: "Add Slack" },
+      config,
+      api,
+      planner,
+      mcp,
+      previewStore,
+      credentialResolver,
+      now: () => now,
+    })
+
+    expect(credentialResolver.resolve).toHaveBeenCalledWith({
+      nodeName: "Send Slack Alert",
+      credentialType: "slackApi",
+    })
+    expect(previewStore.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proposedWorkflowHash: stableHash(resolvedProposedWorkflow),
+        proposedWorkflow: resolvedProposedWorkflow,
+      }),
+    )
+    expect(result.missingCredentials).toEqual([])
+  })
+
   it("applies a fresh preview and updates n8n and the registry", async () => {
     const api = {
       getWorkflow: vi.fn(async () => currentWorkflow),

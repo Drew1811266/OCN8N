@@ -1,9 +1,10 @@
+import type { ApiPluginConfig } from "../config.js"
 import { N8nBuilderError } from "../errors.js"
 import { stableHash } from "../hash.js"
 import type { PatchPlannerContext } from "../opencode-planner.js"
 import type { SaveUpdatePreviewInput, UpdatePreview } from "../preview-store.js"
 import type { WorkflowRegistryRecord } from "../registry.js"
-import type { CredentialGap, PluginConfig, Warning } from "../types.js"
+import type { CredentialGap, Warning } from "../types.js"
 import { validateWorkflowForSave, type N8nWorkflow, type WorkflowIssue } from "../validator.js"
 import { compileWorkflowPlan } from "../workflow-compiler.js"
 import type { WorkflowPatchPlan } from "../workflow-plan.js"
@@ -30,7 +31,7 @@ export type UpdateWorkflowResult = {
 
 export type UpdateWorkflowDeps = {
   args: UpdateWorkflowArgs
-  config: PluginConfig
+  config: ApiPluginConfig
   api: {
     getWorkflow(workflowId: string): Promise<N8nWorkflow & { id: string }>
     updateWorkflow?(workflowId: string, workflow: N8nWorkflow): Promise<N8nWorkflow & { id: string }>
@@ -50,7 +51,18 @@ export type UpdateWorkflowDeps = {
   registry?: {
     upsert(record: WorkflowRegistryRecord): Promise<void>
   }
+  credentialResolver?: WorkflowCredentialResolver
   now?: () => Date
+}
+
+type WorkflowCredentialResolver = {
+  resolve(input: { nodeName: string; credentialType: string }): Promise<{
+    reference?: {
+      id: string
+      name: string
+    }
+    gap?: CredentialGap
+  }>
 }
 
 type PreviewUpdateDeps = UpdateWorkflowDeps & {
@@ -131,6 +143,7 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     })
   }
 
+  const missingCredentials = await resolveWorkflowCredentials(proposedWorkflow, deps.credentialResolver)
   const preview = await previewStore.save({
     workflowId: deps.args.workflowId,
     baseWorkflowHash: stableHash(currentWorkflow),
@@ -150,7 +163,7 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     previewId: preview.previewId,
     summary: patchPlan.summary,
     changes: patchPlan.changes,
-    missingCredentials: [],
+    missingCredentials,
     warnings: proposedValidation.warnings.map(toWarning),
   }
 }
@@ -235,6 +248,39 @@ async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult>
 function workflowUrl(baseUrl: string, workflowId: string): string {
   const appBaseUrl = baseUrl.replace(/\/api\/v\d+\/?$/i, "").replace(/\/+$/, "")
   return `${appBaseUrl}/workflow/${encodeURIComponent(workflowId)}`
+}
+
+async function resolveWorkflowCredentials(
+  workflow: N8nWorkflow,
+  credentialResolver: WorkflowCredentialResolver | undefined,
+): Promise<CredentialGap[]> {
+  if (!credentialResolver) return []
+
+  const missingCredentials: CredentialGap[] = []
+
+  for (const node of workflow.nodes) {
+    if (!node.credentials) continue
+
+    for (const credentialType of Object.keys(node.credentials)) {
+      const result = await credentialResolver.resolve({
+        nodeName: node.name,
+        credentialType,
+      })
+
+      if (result.reference) {
+        node.credentials[credentialType] = {
+          id: result.reference.id,
+          name: result.reference.name,
+        }
+      }
+
+      if (result.gap) {
+        missingCredentials.push(result.gap)
+      }
+    }
+  }
+
+  return missingCredentials
 }
 
 function toWarning(issue: WorkflowIssue): Warning {

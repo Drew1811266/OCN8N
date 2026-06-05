@@ -4,15 +4,14 @@ import { OpencodePlanner } from "../src/opencode-planner.js"
 import { simpleWebhookPlan } from "./fixtures/workflows.js"
 
 describe("OpencodePlanner", () => {
-  it("creates a session, requests structured workflow plan output, and parses the result", async () => {
+  it("creates a session, requests JSON workflow plan output, and parses the result", async () => {
     const client = {
       session: {
         create: vi.fn(async () => ({ id: "session_1" })),
         prompt: vi.fn(async () => ({
           data: {
-            info: {
-              structured_output: simpleWebhookPlan,
-            },
+            info: {},
+            parts: [{ type: "text", text: JSON.stringify(simpleWebhookPlan) }],
           },
         })),
       },
@@ -36,19 +35,40 @@ describe("OpencodePlanner", () => {
             text: expect.stringContaining("Do not include secret values"),
           },
         ],
-        format: {
-          type: "json_schema",
-          schema: expect.objectContaining({
-            type: "object",
-            required: ["name", "summary", "nodes", "connections"],
-          }),
-          retryCount: 2,
-        },
       },
     })
+    const promptCalls = client.session.prompt.mock.calls as unknown as Array<[
+      { body: { parts: Array<{ text: string }>; format?: unknown } },
+    ]>
+    const promptInput = promptCalls[0]?.[0]
+    expect(promptInput?.body).not.toHaveProperty("format")
+    expect(promptInput?.body.parts[0]?.text).toContain('"required": [')
   })
 
-  it("throws a typed error when OpenCode returns no structured output", async () => {
+  it("parses JSON from fenced assistant text", async () => {
+    const client = {
+      session: {
+        create: vi.fn(async () => ({ id: "session_1" })),
+        prompt: vi.fn(async () => ({
+          data: {
+            info: {},
+            parts: [{ type: "text", text: `\`\`\`json\n${JSON.stringify(simpleWebhookPlan)}\n\`\`\`` }],
+          },
+        })),
+      },
+    }
+    const planner = new OpencodePlanner({ client })
+
+    await expect(
+      planner.createPlan({
+        prompt: "Build an order webhook",
+        sdkReference: "Use n8n workflow rules",
+        nodeDocumentation: [],
+      }),
+    ).resolves.toEqual(simpleWebhookPlan)
+  })
+
+  it("throws a typed error when OpenCode returns no assistant text", async () => {
     const client = {
       session: {
         create: vi.fn(async () => ({ id: "session_1" })),
@@ -72,7 +92,7 @@ describe("OpencodePlanner", () => {
     expect((error as N8nBuilderError).code).toBe("OPENCODE_PLANNER_EMPTY")
   })
 
-  it("creates patch plans with current workflow context and validates structured output", async () => {
+  it("creates patch plans with current workflow context and validates JSON output", async () => {
     const patchPlan = {
       summary: "Add Slack notification",
       changes: ["Add Slack node"],
@@ -83,9 +103,8 @@ describe("OpencodePlanner", () => {
         create: vi.fn(async () => ({ id: "session_1" })),
         prompt: vi.fn(async () => ({
           data: {
-            info: {
-              structured_output: patchPlan,
-            },
+            info: {},
+            parts: [{ type: "text", text: JSON.stringify(patchPlan) }],
           },
         })),
       },
@@ -111,11 +130,13 @@ describe("OpencodePlanner", () => {
             text: expect.stringContaining("Current workflow JSON"),
           },
         ],
-        format: expect.objectContaining({
-          type: "json_schema",
-        }),
       },
     })
+    const promptCalls = client.session.prompt.mock.calls as unknown as Array<[
+      { body: { parts: Array<{ text: string }>; format?: unknown } },
+    ]>
+    const promptInput = promptCalls[0]?.[0]
+    expect(promptInput?.body).not.toHaveProperty("format")
   })
 
   it("redacts secret-looking values from current workflow JSON in patch prompts", async () => {
@@ -129,9 +150,8 @@ describe("OpencodePlanner", () => {
         create: vi.fn(async () => ({ id: "session_1" })),
         prompt: vi.fn(async (_input: unknown) => ({
           data: {
-            info: {
-              structured_output: patchPlan,
-            },
+            info: {},
+            parts: [{ type: "text", text: JSON.stringify(patchPlan) }],
           },
         })),
       },
@@ -180,9 +200,8 @@ describe("OpencodePlanner", () => {
         create: vi.fn(async () => ({ id: "session_1" })),
         prompt: vi.fn(async (_input: unknown) => ({
           data: {
-            info: {
-              structured_output: patchPlan,
-            },
+            info: {},
+            parts: [{ type: "text", text: JSON.stringify(patchPlan) }],
           },
         })),
       },
@@ -225,9 +244,8 @@ describe("OpencodePlanner", () => {
         create: vi.fn(async () => ({ id: "session_1" })),
         prompt: vi.fn(async (_input: unknown) => ({
           data: {
-            info: {
-              structured_output: patchPlan,
-            },
+            info: {},
+            parts: [{ type: "text", text: JSON.stringify(patchPlan) }],
           },
         })),
       },
@@ -296,9 +314,8 @@ describe("OpencodePlanner", () => {
         create: vi.fn(async () => ({ id: "session_1" })),
         prompt: vi.fn(async () => ({
           data: {
-            info: {
-              structured_output: { name: "bad" },
-            },
+            info: {},
+            parts: [{ type: "text", text: JSON.stringify({ name: "bad" }) }],
           },
         })),
       },

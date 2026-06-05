@@ -1,5 +1,5 @@
 import { tool, type Plugin, type PluginInput, type ToolResult } from "@opencode-ai/plugin"
-import { loadPluginConfig } from "./config.js"
+import { loadApiPluginConfig, loadLocalPluginConfig, loadPluginConfig } from "./config.js"
 import { CredentialResolver } from "./credential-resolver.js"
 import { N8nBuilderError } from "./errors.js"
 import { N8nApiClient } from "./n8n-api-client.js"
@@ -29,7 +29,43 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
       },
     })
 
-    async function deps() {
+    async function localDeps() {
+      const opencodeConfig = await getOpencodeConfig(client, directory)
+      const config = loadLocalPluginConfig({
+        env: process.env,
+        opencodeConfig,
+        workspaceDir: directory,
+        pluginVersion: version,
+      })
+
+      return {
+        config,
+        registry: new WorkflowRegistry(config.registryPath),
+      }
+    }
+
+    async function apiDeps() {
+      const opencodeConfig = await getOpencodeConfig(client, directory)
+      const config = loadApiPluginConfig({
+        env: process.env,
+        opencodeConfig,
+        workspaceDir: directory,
+        pluginVersion: version,
+      })
+      const api = new N8nApiClient({
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+      })
+
+      return {
+        config,
+        api,
+        registry: new WorkflowRegistry(config.registryPath),
+        previewStore: new PreviewStore(config.previewDir),
+      }
+    }
+
+    async function fullDeps() {
       const opencodeConfig = await getOpencodeConfig(client, directory)
       const config = loadPluginConfig({
         env: process.env,
@@ -65,11 +101,9 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
           args: {
             prompt: tool.schema.string().min(1),
             name: tool.schema.string().optional(),
-            projectId: tool.schema.string().optional(),
-            folderId: tool.schema.string().optional(),
           },
           async execute(args) {
-            const resolved = await deps()
+            const resolved = await fullDeps()
             const result = await buildWorkflow({
               args,
               config: resolved.config,
@@ -77,6 +111,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
               registry: resolved.registry,
               planner: resolved.planner,
               mcp: resolved.mcp,
+              credentialResolver: resolved.credentialResolver,
             })
 
             return jsonOutput("n8n workflow draft created", result)
@@ -93,15 +128,31 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
             previewId: tool.schema.string().optional(),
           },
           async execute(args) {
-            const resolved = await deps()
+            const updateArgs = toUpdateWorkflowArgs(args)
+
+            if (updateArgs.mode === "preview") {
+              const resolved = await fullDeps()
+              const result = await updateWorkflow({
+                args: updateArgs,
+                config: resolved.config,
+                api: resolved.api,
+                registry: resolved.registry,
+                previewStore: resolved.previewStore,
+                planner: resolved.planner,
+                mcp: resolved.mcp,
+                credentialResolver: resolved.credentialResolver,
+              })
+
+              return jsonOutput("n8n workflow update", result)
+            }
+
+            const resolved = await apiDeps()
             const result = await updateWorkflow({
-              args: toUpdateWorkflowArgs(args),
+              args: updateArgs,
               config: resolved.config,
               api: resolved.api,
               registry: resolved.registry,
               previewStore: resolved.previewStore,
-              planner: resolved.planner,
-              mcp: resolved.mcp,
             })
 
             return jsonOutput("n8n workflow update", result)
@@ -115,7 +166,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
             workflowId: tool.schema.string().min(1),
           },
           async execute(args) {
-            const resolved = await deps()
+            const resolved = await apiDeps()
             const result = await inspectWorkflow({
               args,
               api: resolved.api,
@@ -129,7 +180,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
           description: "List n8n workflows managed by this OpenCode workspace.",
           args: {},
           async execute() {
-            const resolved = await deps()
+            const resolved = await localDeps()
             const result = await listManagedWorkflows({
               registry: resolved.registry,
             })

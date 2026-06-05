@@ -85,6 +85,103 @@ describe("buildWorkflow", () => {
     })
   })
 
+  it("resolves existing credential references before creating the workflow", async () => {
+    const api = {
+      createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
+    }
+    const registry = { upsert: vi.fn(async () => undefined) }
+    const planner = { createPlan: vi.fn(async () => simpleWebhookPlan) }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "n8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "Slack schema"),
+    }
+    const credentialResolver = {
+      resolve: vi.fn(async () => ({
+        reference: {
+          id: "cred_1",
+          name: "OpenCode Slack",
+        },
+      })),
+    }
+
+    const result = await buildWorkflow({
+      args: { prompt: "Build an order webhook" },
+      config,
+      api,
+      registry,
+      planner,
+      mcp,
+      credentialResolver,
+      now: () => new Date("2026-06-04T00:00:00.000Z"),
+    })
+
+    expect(credentialResolver.resolve).toHaveBeenCalledWith({
+      nodeName: "Send Slack Alert",
+      credentialType: "slackApi",
+    })
+    expect(api.createWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            name: "Send Slack Alert",
+            credentials: {
+              slackApi: {
+                id: "cred_1",
+                name: "OpenCode Slack",
+              },
+            },
+          }),
+        ]),
+      }),
+    )
+    expect(result.missingCredentials).toEqual([])
+  })
+
+  it("reports credential gaps while still creating a draft workflow", async () => {
+    const api = {
+      createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
+    }
+    const registry = { upsert: vi.fn(async () => undefined) }
+    const planner = { createPlan: vi.fn(async () => simpleWebhookPlan) }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "n8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "Slack schema"),
+    }
+    const credentialResolver = {
+      resolve: vi.fn(async () => ({
+        gap: {
+          nodeName: "Send Slack Alert",
+          credentialType: "slackApi",
+          credentialName: "OpenCode Slack",
+          reason: "Missing environment variables: SLACK_BOT_TOKEN",
+        },
+      })),
+    }
+
+    const result = await buildWorkflow({
+      args: { prompt: "Build an order webhook" },
+      config,
+      api,
+      registry,
+      planner,
+      mcp,
+      credentialResolver,
+      now: () => new Date("2026-06-04T00:00:00.000Z"),
+    })
+
+    expect(api.createWorkflow).toHaveBeenCalled()
+    expect(result.missingCredentials).toEqual([
+      {
+        nodeName: "Send Slack Alert",
+        credentialType: "slackApi",
+        credentialName: "OpenCode Slack",
+        reason: "Missing environment variables: SLACK_BOT_TOKEN",
+      },
+    ])
+  })
+
   it("throws and does not create a workflow when validation fails", async () => {
     const invalidPlan: WorkflowPlan = {
       ...simpleWebhookPlan,

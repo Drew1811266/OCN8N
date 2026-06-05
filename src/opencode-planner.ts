@@ -18,13 +18,14 @@ type OpencodeSessionCreateResult = {
 type OpencodePromptResult = {
   data?: {
     info?: {
-      structured_output?: unknown
       error?: {
         name?: string
         message?: string
       }
     }
+    parts?: unknown
   }
+  parts?: unknown
 }
 
 type OpencodeClientLike = {
@@ -34,11 +35,6 @@ type OpencodeClientLike = {
       path: { id: string }
       body: {
         parts: Array<{ type: "text"; text: string }>
-        format: {
-          type: "json_schema"
-          schema: JsonSchema
-          retryCount: number
-        }
       }
     }): Promise<OpencodePromptResult>
   }
@@ -98,12 +94,7 @@ export class OpencodePlanner {
       const result = await this.client.session.prompt({
         path: { id: sessionId },
         body: {
-          parts: [{ type: "text", text: input.text }],
-          format: {
-            type: "json_schema",
-            schema: input.schema,
-            retryCount: 2,
-          },
+          parts: [{ type: "text", text: buildJsonPrompt(input.text, input.schema) }],
         },
       })
 
@@ -118,11 +109,7 @@ export class OpencodePlanner {
         )
       }
 
-      if (!info?.structured_output) {
-        throw new N8nBuilderError("OpenCode structured planning returned no structured output.", "OPENCODE_PLANNER_EMPTY")
-      }
-
-      return info.structured_output
+      return parseJsonFromAssistantText(extractAssistantText(result))
     } catch (error) {
       if (error instanceof N8nBuilderError) {
         throw error
@@ -191,6 +178,57 @@ export class OpencodePlanner {
       `Node documentation:\n${JSON.stringify(context.nodeDocumentation, null, 2)}`,
     ].join("\n")
   }
+}
+
+function buildJsonPrompt(text: string, schema: JsonSchema): string {
+  return [
+    text,
+    "",
+    "Return only valid JSON matching this JSON Schema.",
+    "Do not include Markdown, commentary, or code fences unless no other response format is possible.",
+    "",
+    `JSON Schema:\n${JSON.stringify(schema, null, 2)}`,
+  ].join("\n")
+}
+
+function extractAssistantText(result: OpencodePromptResult): string {
+  const parts = Array.isArray(result.data?.parts) ? result.data.parts : result.parts
+  if (!Array.isArray(parts)) {
+    throw new N8nBuilderError("OpenCode structured planning returned no assistant text.", "OPENCODE_PLANNER_EMPTY")
+  }
+
+  const text = parts
+    .filter(isTextPart)
+    .map((part) => part.text)
+    .join("\n")
+    .trim()
+
+  if (!text) {
+    throw new N8nBuilderError("OpenCode structured planning returned no assistant text.", "OPENCODE_PLANNER_EMPTY")
+  }
+
+  return text
+}
+
+function isTextPart(value: unknown): value is { type: "text"; text: string } {
+  return isRecord(value) && value.type === "text" && typeof value.text === "string"
+}
+
+function parseJsonFromAssistantText(text: string): unknown {
+  const jsonText = extractJsonText(text)
+
+  try {
+    return JSON.parse(jsonText)
+  } catch (error) {
+    throw new N8nBuilderError("OpenCode structured planning returned invalid JSON.", "OPENCODE_PLANNER_ERROR", {
+      cause: serializeError(error),
+    })
+  }
+}
+
+function extractJsonText(text: string): string {
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  return (fenceMatch?.[1] ?? text).trim()
 }
 
 function redactWorkflowJson(currentWorkflowJson: string): string {

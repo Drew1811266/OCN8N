@@ -13,8 +13,6 @@ const managedBy = "opencode-n8n-builder" as const
 export type BuildWorkflowArgs = {
   prompt: string
   name?: string
-  projectId?: string
-  folderId?: string
 }
 
 export type BuildWorkflowResult = {
@@ -44,7 +42,18 @@ export type BuildWorkflowDeps = {
     searchNodes(query: string): Promise<string>
     getNodeTypes(nodeTypes: NodeTypeLookup[]): Promise<string>
   }
+  credentialResolver?: WorkflowCredentialResolver
   now?: () => Date
+}
+
+type WorkflowCredentialResolver = {
+  resolve(input: { nodeName: string; credentialType: string }): Promise<{
+    reference?: {
+      id: string
+      name: string
+    }
+    gap?: CredentialGap
+  }>
 }
 
 export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkflowResult> {
@@ -85,6 +94,7 @@ export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkf
     })
   }
 
+  const missingCredentials = await resolveWorkflowCredentials(workflow, deps.credentialResolver)
   const created = await deps.api.createWorkflow(workflow)
   const url = workflowUrl(deps.config.baseUrl, created.id)
 
@@ -105,9 +115,42 @@ export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkf
     url,
     nodeCount: workflow.nodes.length,
     summary: plan.summary,
-    missingCredentials: [],
+    missingCredentials,
     warnings: validation.warnings.map(toWarning),
   }
+}
+
+async function resolveWorkflowCredentials(
+  workflow: N8nWorkflow,
+  credentialResolver: WorkflowCredentialResolver | undefined,
+): Promise<CredentialGap[]> {
+  if (!credentialResolver) return []
+
+  const missingCredentials: CredentialGap[] = []
+
+  for (const node of workflow.nodes) {
+    if (!node.credentials) continue
+
+    for (const credentialType of Object.keys(node.credentials)) {
+      const result = await credentialResolver.resolve({
+        nodeName: node.name,
+        credentialType,
+      })
+
+      if (result.reference) {
+        node.credentials[credentialType] = {
+          id: result.reference.id,
+          name: result.reference.name,
+        }
+      }
+
+      if (result.gap) {
+        missingCredentials.push(result.gap)
+      }
+    }
+  }
+
+  return missingCredentials
 }
 
 function workflowUrl(baseUrl: string, workflowId: string): string {

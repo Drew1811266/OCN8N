@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { loadPluginConfig } from "../src/config.js"
+import { loadApiPluginConfig, loadLocalPluginConfig, loadPluginConfig } from "../src/config.js"
 import { N8nBuilderError } from "../src/errors.js"
 
 const requiredEnv = {
@@ -24,6 +24,55 @@ function captureConfigError(opencodeConfig: unknown): N8nBuilderError {
 }
 
 describe("loadPluginConfig", () => {
+  it("loads local workspace config without n8n connection settings", () => {
+    const config = loadLocalPluginConfig({
+      env: {},
+      opencodeConfig: {},
+      workspaceDir: "/tmp/project",
+      pluginVersion: "0.1.0",
+    })
+
+    expect(config.workspaceDir).toBe("/tmp/project")
+    expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
+    expect(config.previewDir).toBe("/tmp/project/.opencode/n8n-update-previews")
+    expect(config.credentialEnv).toEqual({})
+    expect(config.pluginVersion).toBe("0.1.0")
+  })
+
+  it("loads API config without requiring MCP URL", () => {
+    const config = loadApiPluginConfig({
+      env: {
+        N8N_BASE_URL: "https://demo.app.n8n.cloud/api/v1",
+        N8N_API_KEY: "n8n_api_key",
+      },
+      opencodeConfig: {},
+      workspaceDir: "/tmp/project",
+    })
+
+    expect(config.baseUrl).toBe("https://demo.app.n8n.cloud/api/v1")
+    expect(config.apiKey).toBe("n8n_api_key")
+    expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
+  })
+
+  it("throws a typed API config error when API settings are missing", () => {
+    try {
+      loadApiPluginConfig({
+        env: {},
+        opencodeConfig: {},
+        workspaceDir: "/tmp/project",
+      })
+    } catch (error) {
+      expect(error).toBeInstanceOf(N8nBuilderError)
+      expect((error as N8nBuilderError).code).toBe("CONFIG_MISSING")
+      expect((error as N8nBuilderError).details).toEqual({
+        missing: ["N8N_BASE_URL", "N8N_API_KEY"],
+      })
+      return
+    }
+
+    throw new Error("Expected loadApiPluginConfig to throw")
+  })
+
   it("loads required n8n settings from environment", () => {
     const config = loadPluginConfig({
       env: requiredEnv,
