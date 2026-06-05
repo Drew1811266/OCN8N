@@ -130,6 +130,26 @@ describe("plugin exports", () => {
 
   it("inspects a workflow without requiring MCP configuration", async () => {
     await withoutN8nEnv(async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
+      await mkdir(path.join(directory, ".opencode"), { recursive: true })
+      await writeFile(
+        path.join(directory, ".opencode", "n8n-workflows.json"),
+        `${JSON.stringify({
+          workflows: [
+            {
+              workflowId: "wf_1",
+              name: "Orders",
+              url: "https://demo/workflow/wf_1",
+              baseUrl: "https://demo/api/v1",
+              managedBy: "opencode-n8n-builder",
+              managedByVersion: "0.1.0",
+              lastPlanHash: "hash",
+              lastUpdatedAt: "2026-06-04T00:00:00.000Z",
+            },
+          ],
+        })}\n`,
+        "utf8",
+      )
       const originalFetch = globalThis.fetch
       const fetchMock = vi.fn(async () => {
         return new Response(
@@ -162,6 +182,7 @@ describe("plugin exports", () => {
         const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
         const result = await plugin(
           mockPluginInput({
+            directory,
             opencodeConfig: {
               n8n: {
                 baseUrl: "https://demo/api/v1",
@@ -187,6 +208,70 @@ describe("plugin exports", () => {
             name: "Orders",
           }),
         )
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    })
+  })
+
+  it("blocks inspect for marker-tagged workflows missing from the local registry", async () => {
+    await withoutN8nEnv(async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
+      const originalFetch = globalThis.fetch
+      const fetchMock = vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            id: "wf_1",
+            name: "Orders",
+            active: false,
+            nodes: [
+              {
+                name: "Start",
+                type: "n8n-nodes-base.manualTrigger",
+                typeVersion: 1,
+                position: [0, 0],
+                parameters: {},
+              },
+            ],
+            connections: {},
+            settings: {},
+            tags: [{ name: "opencode-n8n-builder" }],
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        )
+      })
+      globalThis.fetch = fetchMock as typeof fetch
+
+      try {
+        const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
+        const result = await plugin(
+          mockPluginInput({
+            directory,
+            opencodeConfig: {
+              n8n: {
+                baseUrl: "https://demo/api/v1",
+                apiKey: "key",
+              },
+            },
+          }),
+        )
+
+        await expect(
+          result.tool?.n8n_inspect_workflow.execute({ workflowId: "wf_1" }, {} as never),
+        ).rejects.toMatchObject({
+          code: "WORKFLOW_INSPECT_BLOCKED",
+          details: {
+            workflowId: "wf_1",
+            issues: [
+              expect.objectContaining({
+                code: "WORKFLOW_NOT_IN_REGISTRY",
+              }),
+            ],
+          },
+        })
       } finally {
         globalThis.fetch = originalFetch
       }

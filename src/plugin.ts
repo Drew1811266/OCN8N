@@ -169,7 +169,9 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
             const resolved = await apiDeps()
             const result = await inspectWorkflow({
               args,
+              baseUrl: resolved.config.baseUrl,
               api: resolved.api,
+              registry: resolved.registry,
             })
 
             return jsonOutput("n8n workflow inspection", result)
