@@ -1,6 +1,5 @@
 import { N8nBuilderError } from "../errors.js"
 import { stableHash } from "../hash.js"
-import type { NodeTypeLookup } from "../n8n-mcp-client.js"
 import type { PatchPlannerContext } from "../opencode-planner.js"
 import type { SaveUpdatePreviewInput, UpdatePreview } from "../preview-store.js"
 import type { WorkflowRegistryRecord } from "../registry.js"
@@ -8,6 +7,7 @@ import type { CredentialGap, PluginConfig, Warning } from "../types.js"
 import { validateWorkflowForSave, type N8nWorkflow, type WorkflowIssue } from "../validator.js"
 import { compileWorkflowPlan } from "../workflow-compiler.js"
 import type { WorkflowPatchPlan } from "../workflow-plan.js"
+import { extractNodeTypeLookups, type NodeTypeLookup } from "./node-lookup.js"
 
 const managedBy = "opencode-n8n-builder" as const
 const previewTtlMs = 30 * 60 * 1000
@@ -93,7 +93,7 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
 
   const sdkReference = await deps.mcp.getSdkReference("all")
   const searchResult = await deps.mcp.searchNodes(deps.args.prompt)
-  const nodeTypes = extractNodeTypes(searchResult)
+  const nodeTypes = extractNodeTypeLookups(searchResult)
   const nodeDocumentation =
     nodeTypes.length > 0
       ? [{ nodeType: "selected", documentation: await deps.mcp.getNodeTypes(nodeTypes) }]
@@ -105,13 +105,18 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     sdkReference,
     nodeDocumentation,
   })
-  const proposedWorkflow = compileWorkflowPlan({
+  const compiledWorkflow = compileWorkflowPlan({
     plan: patchPlan.replacementPlan,
     marker: {
       managedBy,
       managedByVersion: deps.config.pluginVersion,
       createdAt: now.toISOString(),
     },
+  })
+  const proposedWorkflow = mergeWorkflowLevelFields({
+    currentWorkflow,
+    compiledWorkflow,
+    managedByVersion: deps.config.pluginVersion,
   })
   const proposedValidation = validateWorkflowForSave({
     workflow: proposedWorkflow,
@@ -174,6 +179,20 @@ async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult>
     throw new N8nBuilderError("Workflow changed after preview was created.", "UPDATE_PREVIEW_STALE")
   }
 
+  const currentValidation = validateWorkflowForSave({
+    workflow: currentWorkflow,
+    requireManagedMarker: true,
+    allowActiveUpdate: false,
+  })
+
+  if (!currentValidation.valid) {
+    throw new N8nBuilderError(
+      "Workflow cannot be applied because the current workflow is not updateable.",
+      "WORKFLOW_UPDATE_BLOCKED",
+      redactedValidationDetails(currentValidation),
+    )
+  }
+
   const proposedValidation = validateWorkflowForSave({
     workflow: preview.proposedWorkflow,
     requireManagedMarker: true,
@@ -213,24 +232,6 @@ async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult>
   }
 }
 
-function extractNodeTypes(searchResult: string): NodeTypeLookup[] {
-  const jsonLookups: NodeTypeLookup[] = []
-  const jsonRanges: Array<[number, number]> = []
-
-  for (const candidate of parseJsonCandidates(searchResult)) {
-    const lookups = collectNodeTypeLookups(candidate.value)
-    if (lookups.length === 0) continue
-
-    jsonLookups.push(...lookups)
-    jsonRanges.push(candidate.range)
-  }
-
-  const searchableText = removeRanges(searchResult, jsonRanges)
-  const textLookups = searchableText.match(/(?:@n8n\/)?n8n-nodes-[a-z0-9_-]+(?:\.[a-z0-9_-]+)+\b/gi) ?? []
-
-  return dedupeNodeTypeLookups([...jsonLookups, ...textLookups]).slice(0, 20)
-}
-
 function workflowUrl(baseUrl: string, workflowId: string): string {
   const appBaseUrl = baseUrl.replace(/\/api\/v\d+\/?$/i, "").replace(/\/+$/, "")
   return `${appBaseUrl}/workflow/${encodeURIComponent(workflowId)}`
@@ -249,167 +250,100 @@ function isPreviewExpired(preview: UpdatePreview, now: Date): boolean {
   return Number.isNaN(expiresAt) || expiresAt <= now.getTime()
 }
 
-function parseJsonCandidates(input: string): Array<{ value: unknown; range: [number, number] }> {
-  const candidates: Array<{ value: unknown; range: [number, number] }> = []
-
-  for (let index = 0; index < input.length; index += 1) {
-    const char = input[index]
-    if (char !== "{" && char !== "[") continue
-
-    const end = findJsonEnd(input, index)
-    if (end === undefined) continue
-
-    try {
-      candidates.push({ value: JSON.parse(input.slice(index, end)), range: [index, end] })
-      index = end - 1
-    } catch {
-      continue
-    }
+function mergeWorkflowLevelFields(input: {
+  currentWorkflow: N8nWorkflow
+  compiledWorkflow: N8nWorkflow
+  managedByVersion: string
+}): N8nWorkflow {
+  return {
+    ...input.compiledWorkflow,
+    active: false,
+    settings: mergeSettings(input.currentWorkflow.settings, input.compiledWorkflow.settings),
+    tags: mergeTags(input.currentWorkflow.tags, input.compiledWorkflow.tags),
+    meta: mergeMeta({
+      currentMeta: input.currentWorkflow.meta,
+      compiledMeta: input.compiledWorkflow.meta,
+      managedByVersion: input.managedByVersion,
+    }),
   }
-
-  return candidates
 }
 
-function findJsonEnd(input: string, start: number): number | undefined {
-  const stack: string[] = []
-  let inString = false
-  let escaped = false
-
-  for (let index = start; index < input.length; index += 1) {
-    const char = input[index]
-
-    if (inString) {
-      if (escaped) {
-        escaped = false
-      } else if (char === "\\") {
-        escaped = true
-      } else if (char === "\"") {
-        inString = false
-      }
-
-      continue
-    }
-
-    if (char === "\"") {
-      inString = true
-      continue
-    }
-
-    if (char === "{") {
-      stack.push("}")
-      continue
-    }
-
-    if (char === "[") {
-      stack.push("]")
-      continue
-    }
-
-    if (char === "}" || char === "]") {
-      if (stack.pop() !== char) return undefined
-      if (stack.length === 0) return index + 1
-    }
-  }
-
-  return undefined
+function mergeSettings(
+  currentSettings: N8nWorkflow["settings"],
+  compiledSettings: N8nWorkflow["settings"],
+): N8nWorkflow["settings"] {
+  const selectedSettings = Object.keys(compiledSettings).length > 0 ? compiledSettings : currentSettings
+  return { ...selectedSettings }
 }
 
-function collectNodeTypeLookups(value: unknown): NodeTypeLookup[] {
-  if (Array.isArray(value)) {
-    return value.flatMap(collectNodeTypeLookups)
-  }
-
-  if (!isRecord(value)) {
-    return []
-  }
-
-  const lookups = Object.values(value).flatMap(collectNodeTypeLookups)
-  if (typeof value.nodeId !== "string" || !isNodeId(value.nodeId)) {
-    return lookups
-  }
-
-  const lookup: Exclude<NodeTypeLookup, string> = {
-    nodeId: value.nodeId,
-  }
-
-  if (typeof value.version === "number") {
-    lookup.version = value.version
-  }
-
-  if (typeof value.resource === "string") {
-    lookup.resource = value.resource
-  }
-
-  if (typeof value.operation === "string") {
-    lookup.operation = value.operation
-  }
-
-  if (typeof value.mode === "string") {
-    lookup.mode = value.mode
-  }
-
-  return [lookup, ...lookups]
-}
-
-function removeRanges(input: string, ranges: Array<[number, number]>): string {
-  if (ranges.length === 0) return input
-
-  let output = ""
-  let cursor = 0
-
-  for (const [start, end] of mergeRanges(ranges)) {
-    output += input.slice(cursor, start)
-    output += " ".repeat(end - start)
-    cursor = end
-  }
-
-  return output + input.slice(cursor)
-}
-
-function mergeRanges(ranges: Array<[number, number]>): Array<[number, number]> {
-  const sortedRanges = [...ranges].sort((a, b) => a[0] - b[0])
-  const merged: Array<[number, number]> = []
-
-  for (const [start, end] of sortedRanges) {
-    const previous = merged.at(-1)
-    if (!previous || start > previous[1]) {
-      merged.push([start, end])
-      continue
-    }
-
-    previous[1] = Math.max(previous[1], end)
-  }
-
-  return merged
-}
-
-function dedupeNodeTypeLookups(lookups: NodeTypeLookup[]): NodeTypeLookup[] {
+function mergeTags(
+  currentTags: N8nWorkflow["tags"] = [],
+  compiledTags: N8nWorkflow["tags"] = [],
+): N8nWorkflow["tags"] {
   const seen = new Set<string>()
-  const deduped: NodeTypeLookup[] = []
+  const tags: NonNullable<N8nWorkflow["tags"]> = []
 
-  for (const lookup of lookups) {
-    const key = nodeTypeLookupKey(lookup)
-    if (seen.has(key)) continue
+  for (const tag of [...currentTags, ...compiledTags]) {
+    const name = tagName(tag)
+    if (seen.has(name)) continue
 
-    seen.add(key)
-    deduped.push(lookup)
+    seen.add(name)
+    tags.push(cloneTag(tag))
   }
 
-  return deduped
-}
-
-function nodeTypeLookupKey(lookup: NodeTypeLookup): string {
-  if (typeof lookup === "string") {
-    return `string:${lookup}`
+  if (!seen.has(managedBy)) {
+    tags.push({ name: managedBy })
   }
 
-  return `object:${JSON.stringify(lookup)}`
+  return tags
 }
 
-function isNodeId(value: string): boolean {
-  return /^(?:@n8n\/)?n8n-nodes-[a-z0-9_-]+(?:\.[a-z0-9_-]+)+$/i.test(value)
+function mergeMeta(input: {
+  currentMeta?: Record<string, unknown>
+  compiledMeta?: Record<string, unknown>
+  managedByVersion: string
+}): Record<string, unknown> {
+  return {
+    ...(input.compiledMeta ?? {}),
+    ...(input.currentMeta ?? {}),
+    managedBy,
+    managedByVersion: input.managedByVersion,
+  }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
+function tagName(tag: NonNullable<N8nWorkflow["tags"]>[number]): string {
+  return typeof tag === "string" ? tag : tag.name
+}
+
+function cloneTag(tag: NonNullable<N8nWorkflow["tags"]>[number]): NonNullable<N8nWorkflow["tags"]>[number] {
+  return typeof tag === "string" ? tag : { ...tag }
+}
+
+function redactedValidationDetails(validation: {
+  issues: WorkflowIssue[]
+  warnings: WorkflowIssue[]
+}): { issues: WorkflowIssue[]; warnings: WorkflowIssue[] } {
+  return {
+    issues: validation.issues.map(redactWorkflowIssue),
+    warnings: validation.warnings.map(redactWorkflowIssue),
+  }
+}
+
+function redactWorkflowIssue(issue: WorkflowIssue): WorkflowIssue {
+  const redactedIssue: WorkflowIssue = {
+    code: issue.code,
+    message: redactIssueText(issue.message),
+  }
+
+  if (issue.nodeName !== undefined) {
+    redactedIssue.nodeName = redactIssueText(issue.nodeName)
+  }
+
+  return redactedIssue
+}
+
+function redactIssueText(value: string): string {
+  return value
+    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
+    .replace(/((?:token|password|secret|api[_-]?key|authorization)\s*[:=]\s*)\S+/gi, "$1[REDACTED]")
 }
