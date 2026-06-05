@@ -60,6 +60,12 @@ const registryRecord: WorkflowRegistryRecord = {
   lastUpdatedAt: now.toISOString(),
 }
 
+const otherBaseUrlRegistryRecord: WorkflowRegistryRecord = {
+  ...registryRecord,
+  url: "https://other-demo/workflow/wf_1",
+  baseUrl: "https://other-demo/api/v1",
+}
+
 describe("updateWorkflow", () => {
   it("previews an update without calling the n8n update API", async () => {
     const api = {
@@ -176,6 +182,60 @@ describe("updateWorkflow", () => {
         issues: [
           expect.objectContaining({
             code: "WORKFLOW_NOT_IN_REGISTRY",
+          }),
+        ],
+      },
+    } satisfies Partial<N8nBuilderError>)
+    expect(registry.get).toHaveBeenCalledWith("wf_1")
+    expect(mcp.getSdkReference).not.toHaveBeenCalled()
+    expect(mcp.searchNodes).not.toHaveBeenCalled()
+    expect(mcp.getNodeTypes).not.toHaveBeenCalled()
+    expect(planner.createPatchPlan).not.toHaveBeenCalled()
+    expect(previewStore.save).not.toHaveBeenCalled()
+    expect(api.updateWorkflow).not.toHaveBeenCalled()
+  })
+
+  it("blocks preview updates for registry records from a different n8n base URL before planning", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => currentWorkflow),
+      updateWorkflow: vi.fn(),
+    }
+    const planner = {
+      createPatchPlan: vi.fn(async () => ({
+        summary: "Add Slack notification",
+        changes: ["Add Slack node"],
+        replacementPlan: simpleWebhookPlan,
+      })),
+    }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "Slack node: n8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "Slack schema"),
+    }
+    const previewStore = { save: vi.fn() }
+    const registry = {
+      get: vi.fn(async () => otherBaseUrlRegistryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await expect(
+      updateWorkflow({
+        args: { workflowId: "wf_1", mode: "preview", prompt: "Add Slack" },
+        config,
+        api,
+        planner,
+        mcp,
+        previewStore,
+        registry,
+        now: () => now,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKFLOW_UPDATE_BLOCKED",
+      details: {
+        workflowId: "wf_1",
+        issues: [
+          expect.objectContaining({
+            code: "WORKFLOW_REGISTRY_BASE_URL_MISMATCH",
           }),
         ],
       },
@@ -363,6 +423,54 @@ describe("updateWorkflow", () => {
         issues: [
           expect.objectContaining({
             code: "WORKFLOW_NOT_IN_REGISTRY",
+          }),
+        ],
+      },
+    } satisfies Partial<N8nBuilderError>)
+    expect(registry.get).toHaveBeenCalledWith("wf_1")
+    expect(api.updateWorkflow).not.toHaveBeenCalled()
+    expect(registry.upsert).not.toHaveBeenCalled()
+  })
+
+  it("blocks apply updates when a valid preview targets a registry record from a different n8n base URL", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => currentWorkflow),
+      updateWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
+    }
+    const previewStore = {
+      get: vi.fn(async () => ({
+        previewId: "preview_1",
+        workflowId: "wf_1",
+        baseWorkflowHash: stableHash(currentWorkflow),
+        proposedWorkflowHash: stableHash(proposedWorkflow),
+        summary: "Apply Slack",
+        changes: ["Add Slack node"],
+        proposedWorkflow,
+        createdAt: "2026-06-04T00:00:00.000Z",
+        expiresAt: "2026-06-04T00:30:00.000Z",
+      })),
+    }
+    const registry = {
+      get: vi.fn(async () => otherBaseUrlRegistryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await expect(
+      updateWorkflow({
+        args: { workflowId: "wf_1", mode: "apply", previewId: "preview_1" },
+        config,
+        api,
+        previewStore,
+        registry,
+        now: () => new Date("2026-06-04T00:10:00.000Z"),
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKFLOW_UPDATE_BLOCKED",
+      details: {
+        workflowId: "wf_1",
+        issues: [
+          expect.objectContaining({
+            code: "WORKFLOW_REGISTRY_BASE_URL_MISMATCH",
           }),
         ],
       },

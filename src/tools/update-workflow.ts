@@ -105,7 +105,7 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     })
   }
 
-  await requireRegistryOwnership(registry, deps.args.workflowId)
+  await requireRegistryOwnership(registry, deps.args.workflowId, deps.config.baseUrl)
 
   const sdkReference = await deps.mcp.getSdkReference("all")
   const searchResult = await deps.mcp.searchNodes(deps.args.prompt)
@@ -211,7 +211,7 @@ async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult>
     )
   }
 
-  await requireRegistryOwnership(registry, deps.args.workflowId)
+  await requireRegistryOwnership(registry, deps.args.workflowId, deps.config.baseUrl)
 
   const proposedValidation = validateWorkflowForSave({
     workflow: preview.proposedWorkflow,
@@ -255,20 +255,38 @@ async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult>
 async function requireRegistryOwnership(
   registry: { get(workflowId: string): Promise<WorkflowRegistryRecord | undefined> },
   workflowId: string,
+  baseUrl: string,
 ): Promise<void> {
   const record = await registry.get(workflowId)
 
-  if (record) return
+  if (!record) {
+    throw new N8nBuilderError(
+      "Workflow cannot be updated because it is not recorded in the local registry.",
+      "WORKFLOW_UPDATE_BLOCKED",
+      {
+        workflowId,
+        issues: [
+          {
+            code: "WORKFLOW_NOT_IN_REGISTRY",
+            message: "Workflow is not recorded in the local OpenCode workflow registry.",
+          },
+        ],
+        warnings: [],
+      },
+    )
+  }
+
+  if (record.baseUrl === baseUrl) return
 
   throw new N8nBuilderError(
-    "Workflow cannot be updated because it is not recorded in the local registry.",
+    "Workflow cannot be updated because its local registry record belongs to a different n8n base URL.",
     "WORKFLOW_UPDATE_BLOCKED",
     {
       workflowId,
       issues: [
         {
-          code: "WORKFLOW_NOT_IN_REGISTRY",
-          message: "Workflow is not recorded in the local OpenCode workflow registry.",
+          code: "WORKFLOW_REGISTRY_BASE_URL_MISMATCH",
+          message: "Workflow registry ownership does not match the configured n8n base URL.",
         },
       ],
       warnings: [],
