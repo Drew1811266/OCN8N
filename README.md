@@ -1,207 +1,242 @@
 # opencode-n8n-builder
 
-OpenCode plugin for creating, inspecting, and safely updating managed n8n workflow drafts from natural-language requests.
+`opencode-n8n-builder` 是一个用于连接 OpenCode 和 n8n 的插件。它允许用户用自然语言描述自动化需求，由 OpenCode 结合 n8n 官方 MCP 节点文档生成、检查并安全更新 n8n workflow 草稿。
 
-Current version: `0.1.0`
+当前版本：`0.1.0`
 
-Development status: early v0.1 release. The core managed-workflow lifecycle is implemented and tested, with a deliberately conservative safety boundary.
+当前状态：早期 `v0.1` 版本。核心的“托管 workflow”生命周期已经实现并通过测试，安全策略较保守，适合继续迭代验证。
 
-## What This Project Does
+## 项目目标
 
-`opencode-n8n-builder` connects OpenCode with n8n so a user can describe an automation workflow in natural language and let OpenCode help build the n8n workflow structure.
+这个项目的目标是让用户可以在 OpenCode 中用自然语言描述自动化流程，例如：
 
-The plugin uses:
+- “当收到 webhook 后，把订单信息整理后发送到 Slack。”
+- “每天早上拉取某个接口的数据，过滤异常记录，然后发邮件提醒。”
+- “给已有的托管 workflow 增加一个错误通知步骤。”
 
-- OpenCode tool APIs for user-facing workflow commands.
-- n8n official MCP endpoints for SDK guidance, node search, and node type documentation.
-- n8n REST API endpoints for workflow and credential persistence.
-- A local OpenCode workspace registry to track which workflows are managed by this plugin.
+插件会负责：
 
-The first release focuses on safe draft creation and controlled iteration. It creates inactive n8n workflows, previews updates before applying them, and refuses to inspect or update arbitrary workflows that were not created and tracked by this plugin.
+1. 读取 n8n 官方 MCP 提供的 SDK 指南和节点文档。
+2. 让 OpenCode 生成结构化 workflow 计划。
+3. 将计划编译成 n8n workflow JSON。
+4. 校验 workflow 的安全性和结构合法性。
+5. 通过 n8n REST API 创建或更新 workflow。
+6. 在本地 registry 中记录哪些 workflow 是由本插件托管的。
 
-## Why It Exists
+第一版重点不是“接管所有 n8n workflow”，而是建立一个安全、可控、可多轮对话迭代的托管 workflow 工作流。
 
-n8n has a large and evolving node ecosystem. Hardcoding node configuration knowledge into a plugin would become stale quickly. This project instead asks n8n MCP for current SDK guidance and node documentation, then uses OpenCode to generate a typed internal workflow plan, compile it to n8n workflow JSON, validate it, and persist it through the n8n API.
+## 为什么要这样设计
 
-The intended workflow is:
+n8n 的节点生态很大，而且节点参数、凭据类型、版本和最佳实践会不断变化。如果在插件里硬编码所有节点配置，维护成本会很高，也很容易过时。
 
-1. The user describes an automation goal in OpenCode.
-2. The plugin searches n8n node documentation dynamically.
-3. OpenCode plans the workflow.
-4. The plugin validates the generated workflow.
-5. The plugin creates an inactive n8n draft.
-6. The user tests or inspects it in n8n.
-7. The user asks OpenCode for changes.
-8. The plugin creates a preview, then applies it only after confirmation.
+因此本项目采用动态检索的方式：
 
-## Capabilities
+- 通过 n8n MCP 获取 SDK 指南。
+- 通过 n8n MCP 搜索节点。
+- 通过 n8n MCP 获取节点类型和配置文档。
+- 让 OpenCode 根据当前文档生成 workflow 计划。
+- 插件只负责校验、编译、持久化和安全边界。
 
-### Implemented in v0.1.0
+这样可以让插件随着 n8n 节点文档更新而更容易适配新节点。
 
-- Create inactive n8n workflow drafts from a natural-language prompt.
-- Dynamically retrieve n8n SDK and node documentation through n8n MCP.
-- Compile OpenCode workflow plans into n8n workflow JSON.
-- Validate workflow structure before save or update.
-- Track plugin-managed workflows in a local `.opencode/n8n-workflows.json` registry.
-- Inspect only inactive workflows that are both visibly marked as plugin-managed and present in the local registry for the current n8n base URL.
-- Update only inactive workflows that are both visibly marked as plugin-managed and present in the local registry for the current n8n base URL.
-- Use a two-step update lifecycle: `preview` then `apply`.
-- Reject stale update previews when the n8n workflow changed after preview generation.
-- Resolve n8n credential references from configured local environment variables.
-- Avoid writing plaintext secrets into workflow JSON, preview files, registry files, logs, or normal tool output.
-- List locally managed workflows without requiring n8n API connectivity.
+## v0.1.0 已实现能力
 
-### Not Included Yet
+- 根据自然语言 prompt 创建 inactive 的 n8n workflow 草稿。
+- 使用 n8n MCP 动态检索 SDK 指南和节点文档。
+- 将 OpenCode 生成的计划编译成 n8n workflow JSON。
+- 在保存和更新前校验 workflow 结构。
+- 在本地 `.opencode/n8n-workflows.json` 中记录托管 workflow。
+- 只 inspect 本插件托管、inactive、且属于当前 n8n base URL 的 workflow。
+- 只 update 本插件托管、inactive、且属于当前 n8n base URL 的 workflow。
+- 使用 `preview` / `apply` 两阶段更新流程。
+- 在 apply 前检查 workflow 是否已被 n8n UI 或其他方式修改，避免过期 preview 覆盖新改动。
+- 从本地环境变量解析或创建 n8n credential 引用。
+- 避免把明文密钥写入 workflow JSON、preview 文件、registry 文件、日志或普通工具输出。
+- 支持列出当前 OpenCode workspace 中本地 registry 记录的托管 workflow。
 
-- Updating arbitrary existing n8n workflows.
-- Updating active workflows.
-- Project or folder placement in n8n.
-- Automatic OAuth consent flows.
-- Full visual workflow diffing.
-- Automatic workflow activation after creation or update.
-- Guaranteed support for every possible third-party/community node.
+## v0.1.0 暂不支持
 
-## Architecture
+- 修改任意已有 n8n workflow。
+- 修改 active workflow。
+- 自动把 workflow 放入 n8n project 或 folder。
+- 自动完成 OAuth 授权流程。
+- 可视化 workflow diff。
+- 创建或更新后自动激活 workflow。
+- 保证支持所有第三方或社区节点。
+- 把已有 workflow 一键导入为托管 workflow。
+
+## 整体架构
 
 ```mermaid
 flowchart TD
-  User["User prompt in OpenCode"] --> Plugin["OpenCode plugin tools"]
-  Plugin --> MCP["n8n MCP client"]
-  Plugin --> Planner["OpenCode planner"]
-  MCP --> NodeDocs["SDK reference and node docs"]
+  User["用户在 OpenCode 中输入自然语言需求"] --> Plugin["OpenCode 插件工具"]
+  Plugin --> MCP["n8n MCP Client"]
+  Plugin --> Planner["OpenCode Planner"]
+  MCP --> NodeDocs["SDK 指南和节点文档"]
   NodeDocs --> Planner
-  Planner --> Plan["Typed workflow plan"]
-  Plan --> Compiler["Workflow compiler"]
-  Compiler --> Validator["Workflow validator"]
-  Validator --> API["n8n REST API client"]
-  API --> N8N["n8n workflow draft"]
+  Planner --> Plan["结构化 workflow 计划"]
+  Plan --> Compiler["Workflow Compiler"]
+  Compiler --> Validator["Workflow Validator"]
+  Validator --> API["n8n REST API Client"]
+  API --> N8N["n8n workflow 草稿"]
   API --> Credentials["n8n credentials"]
-  Plugin --> Registry["Local workflow registry"]
-  Plugin --> PreviewStore["Local update preview store"]
+  Plugin --> Registry["本地 workflow registry"]
+  Plugin --> PreviewStore["本地 update preview store"]
 ```
 
-Main modules:
+主要模块：
 
-- `src/plugin.ts`: OpenCode tool registration and dependency wiring.
-- `src/opencode-planner.ts`: prompts OpenCode and parses structured workflow plans.
-- `src/n8n-mcp-client.ts`: JSON-RPC MCP client for n8n documentation and node lookup.
-- `src/n8n-api-client.ts`: REST client for n8n workflows and credentials.
-- `src/workflow-compiler.ts`: compiles typed plans into n8n workflow JSON.
-- `src/validator.ts`: validates workflow safety, markers, connections, active state, and secret-looking values.
-- `src/credential-resolver.ts`: creates or reuses n8n credentials from configured environment variables.
-- `src/registry.ts`: stores local ownership records for managed workflows.
-- `src/preview-store.ts`: stores short-lived update previews.
-- `src/tools/*`: tool-level orchestration for build, update, inspect, and list.
+- `src/plugin.ts`：OpenCode 插件入口，负责注册工具和依赖装配。
+- `src/opencode-planner.ts`：调用 OpenCode 生成 workflow 计划，并解析结构化 JSON。
+- `src/n8n-mcp-client.ts`：n8n MCP JSON-RPC 客户端，用于读取 SDK 指南、搜索节点和获取节点文档。
+- `src/n8n-api-client.ts`：n8n REST API 客户端，用于 workflow 和 credential 持久化。
+- `src/workflow-compiler.ts`：把内部 workflow plan 编译为 n8n workflow JSON。
+- `src/validator.ts`：校验 workflow 结构、托管标记、连接关系、active 状态和疑似明文密钥。
+- `src/credential-resolver.ts`：根据配置和环境变量复用或创建 n8n credential。
+- `src/registry.ts`：管理本地托管 workflow registry。
+- `src/preview-store.ts`：保存短期 update preview。
+- `src/tools/*`：分别实现 build、update、inspect、list 工具编排。
 
-## OpenCode Tools
+## OpenCode 工具
 
 ### `n8n_build_workflow`
 
-Creates a new inactive n8n workflow draft managed by this plugin.
+根据自然语言创建新的 inactive n8n workflow 草稿。
 
-Arguments:
+参数：
 
-- `prompt` (required): natural-language workflow request.
-- `name` (optional): workflow name override.
+- `prompt`：必填，自然语言 workflow 需求。
+- `name`：可选，workflow 名称覆盖。
 
-Behavior:
+执行流程：
 
-- Loads n8n SDK guidance and node documentation through MCP.
-- Asks OpenCode to create a workflow plan.
-- Compiles the plan to n8n workflow JSON.
-- Forces `active: false`.
-- Adds managed markers.
-- Resolves configured credentials.
-- Creates the workflow through n8n REST API.
-- Writes a local registry record.
+1. 读取 n8n SDK 指南。
+2. 根据 prompt 搜索相关 n8n 节点。
+3. 获取节点类型和配置文档。
+4. 让 OpenCode 生成 workflow plan。
+5. 编译为 n8n workflow JSON。
+6. 强制设置 `active: false`。
+7. 写入 `opencode-n8n-builder` 托管标记。
+8. 解析 credential 引用。
+9. 调用 n8n REST API 创建 workflow。
+10. 写入本地 registry。
 
 ### `n8n_update_workflow`
 
-Previews or applies an update to a managed workflow.
+预览或应用对托管 workflow 的更新。
 
-Arguments:
+参数：
 
-- `workflowId` (required): n8n workflow ID.
-- `mode` (required): `preview` or `apply`.
-- `prompt` (required in `preview` mode): requested workflow change.
-- `previewId` (required in `apply` mode): preview ID returned by a previous preview.
+- `workflowId`：必填，n8n workflow ID。
+- `mode`：必填，`preview` 或 `apply`。
+- `prompt`：`preview` 模式必填，描述希望如何修改 workflow。
+- `previewId`：`apply` 模式必填，由上一次 preview 返回。
 
-Behavior:
+`preview` 行为：
 
-- `preview` reads the current managed workflow, generates a replacement proposal, validates it, resolves credentials, and stores a short-lived preview.
-- `apply` reloads the current workflow, verifies the base hash still matches the preview, revalidates the proposal, and updates n8n.
-- Both modes require the workflow to be inactive, visibly marked as managed, and present in the local registry for the current n8n base URL.
+- 读取当前 workflow。
+- 检查 workflow 是否为 inactive 的托管 workflow。
+- 检查本地 registry 中是否存在同 base URL 的记录。
+- 根据用户 prompt 生成替换方案。
+- 编译和校验新 workflow。
+- 解析 credential。
+- 保存短期 preview。
+- 返回变更摘要，不修改 n8n。
+
+`apply` 行为：
+
+- 读取 preview。
+- 重新读取当前 workflow。
+- 检查当前 workflow hash 是否仍然匹配 preview 生成时的 base hash。
+- 再次校验 proposed workflow。
+- 调用 n8n API 更新 workflow。
+- 更新本地 registry。
 
 ### `n8n_inspect_workflow`
 
-Inspects a managed workflow and returns a summary of nodes, credential types, connections, active state, and validation issues.
+查看托管 workflow 的摘要信息。
 
-Arguments:
+参数：
 
-- `workflowId` (required): n8n workflow ID.
+- `workflowId`：必填，n8n workflow ID。
 
-Behavior:
+返回内容包括：
 
-- Reads the workflow through n8n REST API.
-- Blocks unmanaged workflows.
-- Blocks active workflows in v0.1.
-- Requires local registry ownership for the same configured n8n base URL.
-- Returns details only after those checks pass.
+- workflow ID。
+- workflow 名称。
+- active 状态。
+- 节点名称和类型。
+- 节点 credential 类型。
+- 连接信息。
+- 校验问题。
+
+安全限制：
+
+- 只允许 inspect inactive workflow。
+- workflow 必须带有 `opencode-n8n-builder` 托管标记。
+- 本地 registry 必须存在对应 workflow ID。
+- registry 记录的 base URL 必须和当前配置一致。
 
 ### `n8n_list_managed_workflows`
 
-Lists workflows tracked in the current OpenCode workspace registry.
+列出当前 OpenCode workspace 中本地 registry 记录的托管 workflow。
 
-Arguments: none.
+参数：无。
 
-Behavior:
+特点：
 
-- Reads `.opencode/n8n-workflows.json`.
-- Does not require n8n API or MCP configuration.
-- Returns workflow ID, name, URL, and last update timestamp.
+- 只读取本地 `.opencode/n8n-workflows.json`。
+- 不需要 n8n API key。
+- 不需要 n8n MCP URL。
+- 适合快速查看当前项目由插件管理了哪些 workflow。
 
-## Safety Model
+## 安全模型
 
-The v0.1 safety model is intentionally conservative.
+v0.1 的安全模型是保守的。
 
-The plugin will not update or inspect a workflow unless all of these are true:
+插件不会 update 或 inspect 一个 workflow，除非同时满足：
 
-- The n8n workflow contains the managed marker or tag for `opencode-n8n-builder`.
-- The workflow is inactive.
-- The local OpenCode workspace registry contains the workflow ID.
-- The registry record belongs to the same configured `N8N_BASE_URL`.
+- n8n workflow 中有 `opencode-n8n-builder` 托管 marker 或 tag。
+- workflow 当前为 inactive。
+- 本地 OpenCode workspace registry 中存在该 workflow ID。
+- registry 记录属于当前配置的 `N8N_BASE_URL`。
 
-Updates also require:
+update 还额外要求：
 
-- A saved preview.
-- Matching workflow ID.
-- A non-expired preview.
-- Matching proposed workflow hash.
-- Matching current workflow hash against the preview base hash.
+- 必须先生成 preview。
+- apply 时必须提供 previewId。
+- preview 未过期。
+- preview 中 proposed workflow hash 未被篡改。
+- 当前 n8n workflow hash 仍然等于生成 preview 时的 base hash。
 
-This prevents accidental edits to arbitrary n8n workflows and reduces the risk of overwriting direct changes made in the n8n UI after a preview was created.
+这些限制用于避免：
 
-## Secret Handling
+- 意外修改用户手工创建的 workflow。
+- 覆盖用户在 n8n UI 中直接做出的新修改。
+- 因 workflow ID 在不同 n8n 实例中碰撞而误操作。
+- 在第一版中误处理 active production workflow。
 
-Do not put API keys, OAuth secrets, passwords, bearer tokens, or webhook signing secrets in prompts or node parameters.
+## 密钥和凭据策略
 
-The plugin is designed to avoid secret leakage:
+不要在 prompt 或 node parameters 中写入 API key、OAuth secret、password、bearer token、webhook signing secret 等明文密钥。
 
-- The planner and validator reject common plaintext secret patterns.
-- Credential resolution reads local environment variables.
-- n8n workflow JSON stores credential references, not raw credential values.
-- Registry files do not store secrets.
-- Preview files do not store secrets.
-- Normal tool output does not include secret values.
-- n8n API and MCP errors are redacted before being surfaced.
+插件会尽量避免密钥泄漏：
 
-OAuth authorization remains a manual n8n UI flow. The plugin can create or reference credentials where the n8n credential type supports API-created values, but it does not complete browser-based OAuth consent.
+- planner 和 validator 会拒绝常见疑似明文密钥。
+- credential resolver 从本地环境变量读取 credential 值。
+- workflow JSON 中只保存 n8n credential 引用，不保存原始密钥。
+- registry 文件不保存密钥。
+- preview 文件不保存密钥。
+- 普通工具输出不返回密钥值。
+- n8n API 和 MCP 错误会做 redaction 后再暴露。
 
-## Configuration
+OAuth 授权仍然需要用户在 n8n UI 中手动完成。插件不会替用户完成浏览器 OAuth consent。
 
-Add the plugin to your OpenCode config and provide n8n connection settings.
+## 配置方式
 
-Example:
+在 OpenCode 配置中启用插件，并提供 n8n 连接配置。
+
+示例：
 
 ```json
 {
@@ -223,31 +258,27 @@ Example:
 }
 ```
 
-Environment variables:
+环境变量：
 
-- `N8N_API_KEY`: n8n API key used for REST API calls.
-- `N8N_BASE_URL`: n8n REST API base URL, for example `https://your-instance.app.n8n.cloud/api/v1`.
-- `N8N_MCP_URL`: n8n MCP endpoint URL used when building workflows or previewing updates.
+- `N8N_API_KEY`：n8n REST API key。
+- `N8N_BASE_URL`：n8n REST API base URL，例如 `https://your-instance.app.n8n.cloud/api/v1`。
+- `N8N_MCP_URL`：n8n MCP endpoint URL，用于 build 和 update preview。
 
-`N8N_BASE_URL` and `N8N_API_KEY` are required for workflow inspection, build, update preview, and update apply.
+配置要求：
 
-`N8N_MCP_URL` is required for build and update preview.
+- `N8N_BASE_URL` 和 `N8N_API_KEY` 是 inspect、build、update preview、update apply 必需配置。
+- `N8N_MCP_URL` 是 build 和 update preview 必需配置。
+- `n8n_list_managed_workflows` 只读取本地 registry，不需要 n8n 连接配置。
 
-`n8n_list_managed_workflows` reads only the local workspace registry and does not require n8n connection settings.
+`N8N_BASE_URL` 和 `N8N_MCP_URL` 可以通过环境变量提供，也可以在 OpenCode config 中用 `n8n.baseUrl` 和 `n8n.mcpUrl` 提供。
 
-`N8N_BASE_URL` and `N8N_MCP_URL` can be set either in the environment or in OpenCode config as `n8n.baseUrl` and `n8n.mcpUrl`.
+`N8N_API_KEY` 也可以通过 `n8n.apiKey` 提供，但更推荐使用环境变量，减少本地配置文件中的密钥暴露。
 
-`N8N_API_KEY` can also be provided as `n8n.apiKey`, but using the environment is preferred for local secret handling.
+## Credential 映射
 
-Optional config:
+`n8n.credentialEnv` 用于告诉插件如何根据本地环境变量创建或复用 n8n credential。
 
-- `n8n.credentialEnv`: maps n8n credential types to credential names and local environment variable names.
-
-## Credential Mapping
-
-Credential mapping tells the plugin how to create or reuse n8n credential records without embedding secret values in workflow JSON.
-
-Example:
+示例：
 
 ```json
 {
@@ -265,23 +296,23 @@ Example:
 }
 ```
 
-At runtime:
+运行时行为：
 
-1. The workflow plan references a credential type, such as `slackApi`.
-2. The resolver checks the configured credential mapping.
-3. If a matching credential already exists in n8n, the workflow stores that credential reference.
-4. If it does not exist and all required environment variables are available, the resolver creates the n8n credential.
-5. If values are missing, the workflow can still be created as a draft and the tool result reports missing credentials.
+1. workflow plan 引用了某种 credential type，例如 `slackApi`。
+2. resolver 检查 `n8n.credentialEnv` 中是否有对应映射。
+3. 如果 n8n 中已存在同 type 和 name 的 credential，就复用该引用。
+4. 如果不存在，并且所需环境变量都存在，就创建新的 n8n credential。
+5. 如果配置缺失或环境变量缺失，workflow 草稿仍可创建，但工具结果会返回 `missingCredentials`。
 
-## Local Development
+## 本地开发
 
-Install dependencies:
+安装依赖：
 
 ```bash
 npm install
 ```
 
-Run checks:
+运行检查：
 
 ```bash
 npm run typecheck
@@ -289,7 +320,7 @@ npm run test
 npm run build
 ```
 
-If you need to run the local binaries directly, the equivalent commands are:
+也可以直接运行本地二进制：
 
 ```bash
 ./node_modules/.bin/tsc --noEmit
@@ -297,59 +328,59 @@ If you need to run the local binaries directly, the equivalent commands are:
 ./node_modules/.bin/tsup
 ```
 
-Package scripts:
+脚本说明：
 
-- `npm run typecheck`: TypeScript type checking.
-- `npm run test`: Vitest test suite.
-- `npm run build`: Build package output with tsup.
-- `npm run check`: Typecheck, test, and build.
+- `npm run typecheck`：运行 TypeScript 类型检查。
+- `npm run test`：运行 Vitest 测试。
+- `npm run build`：使用 tsup 构建 package 输出。
+- `npm run check`：依次运行 typecheck、test、build。
 
-## Test Coverage
+## 测试覆盖
 
-The v0.1.0 test suite covers:
+v0.1.0 测试覆盖：
 
-- OpenCode plugin registration and tool wiring.
-- Configuration loading from env and OpenCode config.
-- n8n MCP JSON-RPC envelopes, content parsing, and error redaction.
-- n8n REST API workflow and credential calls.
-- Planner JSON extraction and validation.
-- Workflow compiler behavior.
-- Workflow validation, secret detection, connection validation, and managed markers.
-- Credential resolver behavior.
-- Registry and preview store persistence.
-- Build workflow orchestration.
-- Update preview/apply safety gates.
-- Inspect/list safety gates.
+- OpenCode 插件注册和工具 wiring。
+- 配置从环境变量和 OpenCode config 中加载。
+- n8n MCP JSON-RPC envelope、content parsing 和错误 redaction。
+- n8n REST API workflow 和 credential 调用。
+- planner JSON 提取和校验。
+- workflow compiler 行为。
+- workflow validator 的结构校验、secret 检测、连接校验和托管 marker 校验。
+- credential resolver 行为。
+- registry 和 preview store 持久化。
+- build workflow 编排。
+- update preview/apply 安全边界。
+- inspect/list 安全边界。
 
-Latest local verification for v0.1.0:
+v0.1.0 最近一次本地验证结果：
 
-- TypeScript: passed.
-- Vitest: 12 test files, 112 tests passed.
-- tsup build: passed.
+- TypeScript：通过。
+- Vitest：12 个测试文件，112 个测试通过。
+- tsup build：通过。
 
-## Repository State
+## 当前版本状态
 
-Version `0.1.0` represents the first functional development milestone:
+`0.1.0` 是第一个可用开发里程碑：
 
-- Core plugin runtime is wired.
-- Managed workflow build/update/inspect/list tools are implemented.
-- Conservative workflow ownership and active-workflow safety checks are in place.
-- Secret handling and credential reference behavior are implemented.
-- Public README describes the current supported scope.
+- 插件运行时已接入 OpenCode。
+- build/update/inspect/list 四个工具已实现。
+- workflow ownership 和 active workflow 安全限制已实现。
+- credential 引用和明文密钥防护已实现。
+- README 描述的是当前真实支持范围。
 
-## Roadmap
+## 后续路线
 
-Potential next milestones:
+可能的后续方向：
 
-- Broader real-world n8n node compatibility testing.
-- Better workflow diff output for update previews.
-- Optional user-approved active workflow handling.
-- n8n project/folder placement once API support is fully defined.
-- More granular credential provider support.
-- Import or claim flow for existing workflows, with explicit user confirmation.
-- Integration tests against a disposable n8n instance.
-- Release packaging and installation documentation for OpenCode plugin distribution.
+- 针对更多真实 n8n 官方节点做兼容性测试。
+- 为 update preview 提供更清晰的 workflow diff。
+- 支持用户显式确认后的 active workflow 操作。
+- 在 n8n API 支持明确后增加 project/folder placement。
+- 增强 credential provider 支持。
+- 增加已有 workflow 的显式导入或 claim 流程。
+- 增加基于临时 n8n 实例的集成测试。
+- 完善 OpenCode 插件发布和安装文档。
 
 ## License
 
-Apache-2.0, matching the repository `LICENSE` file and `package.json`.
+Apache-2.0，和仓库中的 `LICENSE` 文件以及 `package.json` 保持一致。
