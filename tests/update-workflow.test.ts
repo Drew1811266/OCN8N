@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { N8nBuilderError } from "../src/errors.js"
 import { stableHash } from "../src/hash.js"
 import type { UpdatePreview } from "../src/preview-store.js"
+import type { WorkflowRegistryRecord } from "../src/registry.js"
 import type { PluginConfig } from "../src/types.js"
 import { updateWorkflow } from "../src/tools/update-workflow.js"
 import type { N8nWorkflow } from "../src/validator.js"
@@ -48,6 +49,17 @@ const proposedWorkflow = compileWorkflowPlan({
   },
 })
 
+const registryRecord: WorkflowRegistryRecord = {
+  workflowId: "wf_1",
+  name: "Orders",
+  url: "https://demo/workflow/wf_1",
+  baseUrl: "https://demo/api/v1",
+  managedBy: "opencode-n8n-builder",
+  managedByVersion: "0.1.0",
+  lastPlanHash: "abc",
+  lastUpdatedAt: now.toISOString(),
+}
+
 describe("updateWorkflow", () => {
   it("previews an update without calling the n8n update API", async () => {
     const api = {
@@ -72,6 +84,10 @@ describe("updateWorkflow", () => {
         ...preview,
       })),
     }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
 
     const result = await updateWorkflow({
       args: { workflowId: "wf_1", mode: "preview", prompt: "Add Slack" },
@@ -80,10 +96,12 @@ describe("updateWorkflow", () => {
       planner,
       mcp,
       previewStore,
+      registry,
       now: () => now,
     })
 
     expect(api.getWorkflow).toHaveBeenCalledWith("wf_1")
+    expect(registry.get).toHaveBeenCalledWith("wf_1")
     expect(mcp.getSdkReference).toHaveBeenCalledWith("all")
     expect(mcp.searchNodes).toHaveBeenCalledWith("Add Slack")
     expect(mcp.getNodeTypes).toHaveBeenCalledWith(["n8n-nodes-base.slack"])
@@ -115,6 +133,60 @@ describe("updateWorkflow", () => {
       missingCredentials: [],
       warnings: [],
     })
+  })
+
+  it("blocks preview updates for marker-tagged workflows missing from the registry before planning", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => currentWorkflow),
+      updateWorkflow: vi.fn(),
+    }
+    const planner = {
+      createPatchPlan: vi.fn(async () => ({
+        summary: "Add Slack notification",
+        changes: ["Add Slack node"],
+        replacementPlan: simpleWebhookPlan,
+      })),
+    }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "Slack node: n8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "Slack schema"),
+    }
+    const previewStore = { save: vi.fn() }
+    const registry = {
+      get: vi.fn(async () => undefined),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await expect(
+      updateWorkflow({
+        args: { workflowId: "wf_1", mode: "preview", prompt: "Add Slack" },
+        config,
+        api,
+        planner,
+        mcp,
+        previewStore,
+        registry,
+        now: () => now,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKFLOW_UPDATE_BLOCKED",
+      details: {
+        workflowId: "wf_1",
+        issues: [
+          expect.objectContaining({
+            code: "WORKFLOW_NOT_IN_REGISTRY",
+          }),
+        ],
+      },
+    } satisfies Partial<N8nBuilderError>)
+    expect(registry.get).toHaveBeenCalledWith("wf_1")
+    expect(mcp.getSdkReference).not.toHaveBeenCalled()
+    expect(mcp.searchNodes).not.toHaveBeenCalled()
+    expect(mcp.getNodeTypes).not.toHaveBeenCalled()
+    expect(planner.createPatchPlan).not.toHaveBeenCalled()
+    expect(previewStore.save).not.toHaveBeenCalled()
+    expect(api.updateWorkflow).not.toHaveBeenCalled()
   })
 
   it("resolves credential references in preview workflows before saving the preview", async () => {
@@ -164,6 +236,10 @@ describe("updateWorkflow", () => {
         },
       })),
     }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
 
     const result = await updateWorkflow({
       args: { workflowId: "wf_1", mode: "preview", prompt: "Add Slack" },
@@ -172,6 +248,7 @@ describe("updateWorkflow", () => {
       planner,
       mcp,
       previewStore,
+      registry,
       credentialResolver,
       now: () => now,
     })
@@ -207,7 +284,10 @@ describe("updateWorkflow", () => {
         expiresAt: "2026-06-04T00:30:00.000Z",
       })),
     }
-    const registry = { upsert: vi.fn(async () => undefined) }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
 
     const result = await updateWorkflow({
       args: { workflowId: "wf_1", mode: "apply", previewId: "preview_1" },
@@ -220,6 +300,7 @@ describe("updateWorkflow", () => {
 
     expect(previewStore.get).toHaveBeenCalledWith("preview_1", new Date("2026-06-04T00:10:00.000Z"))
     expect(api.getWorkflow).toHaveBeenCalledWith("wf_1")
+    expect(registry.get).toHaveBeenCalledWith("wf_1")
     expect(api.updateWorkflow).toHaveBeenCalledWith("wf_1", proposedWorkflow)
     expect(registry.upsert).toHaveBeenCalledWith({
       workflowId: "wf_1",
@@ -241,6 +322,54 @@ describe("updateWorkflow", () => {
       missingCredentials: [],
       warnings: [],
     })
+  })
+
+  it("blocks apply updates when a valid preview targets a workflow missing from the registry", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => currentWorkflow),
+      updateWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
+    }
+    const previewStore = {
+      get: vi.fn(async () => ({
+        previewId: "preview_1",
+        workflowId: "wf_1",
+        baseWorkflowHash: stableHash(currentWorkflow),
+        proposedWorkflowHash: stableHash(proposedWorkflow),
+        summary: "Apply Slack",
+        changes: ["Add Slack node"],
+        proposedWorkflow,
+        createdAt: "2026-06-04T00:00:00.000Z",
+        expiresAt: "2026-06-04T00:30:00.000Z",
+      })),
+    }
+    const registry = {
+      get: vi.fn(async () => undefined),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await expect(
+      updateWorkflow({
+        args: { workflowId: "wf_1", mode: "apply", previewId: "preview_1" },
+        config,
+        api,
+        previewStore,
+        registry,
+        now: () => new Date("2026-06-04T00:10:00.000Z"),
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKFLOW_UPDATE_BLOCKED",
+      details: {
+        workflowId: "wf_1",
+        issues: [
+          expect.objectContaining({
+            code: "WORKFLOW_NOT_IN_REGISTRY",
+          }),
+        ],
+      },
+    } satisfies Partial<N8nBuilderError>)
+    expect(registry.get).toHaveBeenCalledWith("wf_1")
+    expect(api.updateWorkflow).not.toHaveBeenCalled()
+    expect(registry.upsert).not.toHaveBeenCalled()
   })
 
   it("blocks active workflows during apply even when the preview hash matches", async () => {
@@ -265,7 +394,10 @@ describe("updateWorkflow", () => {
         expiresAt: "2026-06-04T00:30:00.000Z",
       })),
     }
-    const registry = { upsert: vi.fn(async () => undefined) }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
 
     await expect(
       updateWorkflow({
@@ -312,7 +444,10 @@ describe("updateWorkflow", () => {
         expiresAt: "2026-06-04T00:30:00.000Z",
       })),
     }
-    const registry = { upsert: vi.fn(async () => undefined) }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
 
     await expect(
       updateWorkflow({
@@ -381,7 +516,10 @@ describe("updateWorkflow", () => {
       }),
       get: vi.fn(async () => savedPreview),
     }
-    const registry = { upsert: vi.fn(async () => undefined) }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
 
     await updateWorkflow({
       args: { workflowId: "wf_1", mode: "preview", prompt: "Add Slack" },
@@ -390,6 +528,7 @@ describe("updateWorkflow", () => {
       planner,
       mcp,
       previewStore,
+      registry,
       now: () => now,
     })
 
@@ -461,7 +600,10 @@ describe("updateWorkflow", () => {
         expiresAt: "2026-06-04T00:30:00.000Z",
       })),
     }
-    const registry = { upsert: vi.fn(async () => undefined) }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
 
     await expect(
       updateWorkflow({
@@ -495,6 +637,10 @@ describe("updateWorkflow", () => {
       getNodeTypes: vi.fn(),
     }
     const previewStore = { save: vi.fn() }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
 
     await expect(
       updateWorkflow({
@@ -504,6 +650,7 @@ describe("updateWorkflow", () => {
         planner,
         mcp,
         previewStore,
+        registry,
         now: () => now,
       }),
     ).rejects.toMatchObject({
@@ -536,6 +683,10 @@ describe("updateWorkflow", () => {
       getNodeTypes: vi.fn(),
     }
     const previewStore = { save: vi.fn() }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
 
     await expect(
       updateWorkflow({
@@ -545,6 +696,7 @@ describe("updateWorkflow", () => {
         planner,
         mcp,
         previewStore,
+        registry,
         now: () => now,
       }),
     ).rejects.toMatchObject({

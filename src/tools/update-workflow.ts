@@ -49,6 +49,7 @@ export type UpdateWorkflowDeps = {
     get?(previewId: string, now?: Date): Promise<UpdatePreview | undefined>
   }
   registry?: {
+    get(workflowId: string): Promise<WorkflowRegistryRecord | undefined>
     upsert(record: WorkflowRegistryRecord): Promise<void>
   }
   credentialResolver?: WorkflowCredentialResolver
@@ -83,8 +84,9 @@ export async function updateWorkflow(deps: UpdateWorkflowDeps): Promise<UpdateWo
 
 async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowResult> {
   const previewStore = deps.previewStore
+  const registry = deps.registry
 
-  if (!deps.planner || !deps.mcp || !previewStore?.save) {
+  if (!deps.planner || !deps.mcp || !previewStore?.save || !registry?.get) {
     throw new N8nBuilderError("Preview dependencies are not configured.", "UPDATE_PREVIEW_DEPS_MISSING")
   }
 
@@ -102,6 +104,8 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
       warnings: currentValidation.warnings,
     })
   }
+
+  await requireRegistryOwnership(registry, deps.args.workflowId)
 
   const sdkReference = await deps.mcp.getSdkReference("all")
   const searchResult = await deps.mcp.searchNodes(deps.args.prompt)
@@ -170,8 +174,9 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
 
 async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult> {
   const previewStore = deps.previewStore
+  const registry = deps.registry
 
-  if (!previewStore?.get || !deps.api.updateWorkflow || !deps.registry) {
+  if (!previewStore?.get || !deps.api.updateWorkflow || !registry?.get || !registry.upsert) {
     throw new N8nBuilderError("Apply dependencies are not configured.", "UPDATE_APPLY_DEPS_MISSING")
   }
 
@@ -206,6 +211,8 @@ async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult>
     )
   }
 
+  await requireRegistryOwnership(registry, deps.args.workflowId)
+
   const proposedValidation = validateWorkflowForSave({
     workflow: preview.proposedWorkflow,
     requireManagedMarker: true,
@@ -222,7 +229,7 @@ async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult>
   const updatedWorkflow = await deps.api.updateWorkflow(deps.args.workflowId, preview.proposedWorkflow)
   const url = workflowUrl(deps.config.baseUrl, deps.args.workflowId)
 
-  await deps.registry.upsert({
+  await registry.upsert({
     workflowId: deps.args.workflowId,
     name: updatedWorkflow.name,
     url,
@@ -243,6 +250,30 @@ async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult>
     missingCredentials: [],
     warnings: proposedValidation.warnings.map(toWarning),
   }
+}
+
+async function requireRegistryOwnership(
+  registry: { get(workflowId: string): Promise<WorkflowRegistryRecord | undefined> },
+  workflowId: string,
+): Promise<void> {
+  const record = await registry.get(workflowId)
+
+  if (record) return
+
+  throw new N8nBuilderError(
+    "Workflow cannot be updated because it is not recorded in the local registry.",
+    "WORKFLOW_UPDATE_BLOCKED",
+    {
+      workflowId,
+      issues: [
+        {
+          code: "WORKFLOW_NOT_IN_REGISTRY",
+          message: "Workflow is not recorded in the local OpenCode workflow registry.",
+        },
+      ],
+      warnings: [],
+    },
+  )
 }
 
 function workflowUrl(baseUrl: string, workflowId: string): string {
