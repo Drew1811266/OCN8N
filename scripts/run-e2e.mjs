@@ -23,8 +23,19 @@ const env = {
 }
 
 let stackTouched = false
+let isShuttingDown = false
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    void handleSignal(signal)
+  })
+}
 
 main().catch(async (error) => {
+  if (isShuttingDown) {
+    return
+  }
+
   if (error instanceof MissingApiKeyError) {
     console.error(redact(error.message))
     console.error("")
@@ -36,14 +47,28 @@ main().catch(async (error) => {
 
   console.error(redact(String(error?.stack || error?.message || error)))
 
-  if (stackTouched && !keepAlive) {
-    await compose(failureDownArgs(), { allowFailure: true, printOutput: true })
-  } else if (stackTouched) {
-    console.error(`n8n E2E stack kept running at ${baseAppUrl}`)
-  }
+  await cleanupAfterFailure()
 
   process.exit(1)
 })
+
+async function handleSignal(signal) {
+  const exitCode = signalExitCode(signal)
+
+  if (isShuttingDown) {
+    return
+  }
+
+  console.error(`${signal} received. Shutting down n8n E2E runner.`)
+
+  try {
+    await cleanupAfterFailure({ signal })
+  } catch (error) {
+    console.error(redact(String(error?.stack || error?.message || error)))
+  } finally {
+    process.exit(exitCode)
+  }
+}
 
 async function main() {
   await assertDockerAvailable()
@@ -130,6 +155,22 @@ function failureDownArgs() {
   }
 
   return args
+}
+
+async function cleanupAfterFailure(options = {}) {
+  isShuttingDown = true
+
+  if (stackTouched && !keepAlive) {
+    await compose(failureDownArgs(), { allowFailure: true, printOutput: true })
+  } else if (stackTouched) {
+    console.error(`n8n E2E stack kept running at ${baseAppUrl}`)
+  } else if (options.signal) {
+    console.error("No n8n E2E stack was started; nothing to clean up.")
+  }
+}
+
+function signalExitCode(signal) {
+  return signal === "SIGINT" ? 130 : 143
 }
 
 async function runVitest() {
