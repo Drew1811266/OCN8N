@@ -28,7 +28,7 @@ export async function createE2eContext(): Promise<E2eContext> {
     const config = createE2eRuntimeConfig({
       env: process.env,
       workspaceDir,
-      pluginVersion: "0.2.0-e2e",
+      pluginVersion: "0.3.0-e2e",
     })
     const api = new N8nApiClient({
       baseUrl: config.baseUrl,

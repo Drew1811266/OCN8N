@@ -49,7 +49,7 @@ describe("plugin E2E smoke", () => {
         settings: { executionOrder: "v1" },
         meta: {
           managedBy: "opencode-n8n-builder",
-          managedByVersion: "0.2.0-e2e",
+          managedByVersion: "0.3.0-e2e",
           createdAt: "2026-06-08T00:00:00.000Z",
         },
       })
@@ -63,12 +63,12 @@ describe("plugin E2E smoke", () => {
         url: workflowUrl(context.config.baseUrl, created.id),
         baseUrl: context.config.baseUrl,
         managedBy: "opencode-n8n-builder",
-        managedByVersion: "0.2.0-e2e",
+        managedByVersion: "0.3.0-e2e",
         lastPlanHash: "plugin-smoke",
         lastUpdatedAt: "2026-06-08T00:00:00.000Z",
       })
 
-      const plugin = createN8nBuilderPlugin({ version: "0.2.0-e2e" })
+      const plugin = createN8nBuilderPlugin({ version: "0.3.0-e2e" })
       const result = await plugin(
         pluginInput(context.workspaceDir, {
           n8n: {

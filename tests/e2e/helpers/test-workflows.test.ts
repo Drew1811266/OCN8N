@@ -13,7 +13,7 @@ import {
 
 const e2eMarker = {
   managedBy: "opencode-n8n-builder",
-  managedByVersion: "0.2.0-e2e",
+  managedByVersion: "0.3.0-e2e",
   createdAt: "2026-06-08T00:00:00.000Z",
 } as const
 

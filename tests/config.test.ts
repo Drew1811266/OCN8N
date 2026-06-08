@@ -35,7 +35,7 @@ describe("loadPluginConfig", () => {
     expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
     expect(config.previewDir).toBe("/tmp/project/.opencode/n8n-update-previews")
     expect(config.credentialEnv).toEqual({})
-    expect(config.pluginVersion).toBe("0.2.0")
+    expect(config.pluginVersion).toBe("0.3.0")
   })
 
   it("loads API config without requiring MCP URL", () => {
@@ -129,7 +129,7 @@ describe("loadPluginConfig", () => {
       },
       opencodeConfig: {},
       workspaceDir: "/tmp/project",
-      pluginVersion: "0.2.0",
+      pluginVersion: "test-version",
     })
 
     expect(config.mcpToken).toBe("mcp_token")
@@ -149,7 +149,7 @@ describe("loadPluginConfig", () => {
         },
       },
       workspaceDir: "/tmp/project",
-      pluginVersion: "0.2.0",
+      pluginVersion: "test-version",
     })
 
     expect(config.mcpToken).toBe("config_token")

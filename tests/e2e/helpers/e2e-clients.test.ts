@@ -21,7 +21,7 @@ const baseConfig: PluginConfig = {
   registryPath: "/tmp/ocn8n-e2e-test/.opencode/n8n-workflows.json",
   previewDir: "/tmp/ocn8n-e2e-test/.opencode/n8n-update-previews",
   credentialEnv: {},
-  pluginVersion: "0.2.0-e2e",
+  pluginVersion: "0.3.0-e2e",
 }
 
 afterEach(() => {

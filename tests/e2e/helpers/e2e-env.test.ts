@@ -15,7 +15,7 @@ describe("e2e env helpers", () => {
         N8N_E2E_MCP_TOKEN: "mcp_token",
       },
       workspaceDir,
-      pluginVersion: "0.2.0-e2e",
+      pluginVersion: "0.3.0-e2e",
     })
 
     expect(config).toEqual(
@@ -27,7 +27,7 @@ describe("e2e env helpers", () => {
         workspaceDir,
         registryPath: path.join(workspaceDir, ".opencode", "n8n-workflows.json"),
         previewDir: path.join(workspaceDir, ".opencode", "n8n-update-previews"),
-        pluginVersion: "0.2.0-e2e",
+        pluginVersion: "0.3.0-e2e",
       }),
     )
   })
@@ -103,7 +103,7 @@ describe("e2e env helpers", () => {
           N8N_E2E_MCP_URL: mcpUrl,
         },
         workspaceDir: "/tmp/ocn8n-e2e",
-        pluginVersion: "0.2.0-e2e",
+        pluginVersion: "0.3.0-e2e",
       })
 
       expect(config.mcpUrl).toBe("http://127.0.0.1:5678/mcp-server/http")
@@ -118,7 +118,7 @@ describe("e2e env helpers", () => {
           N8N_E2E_API_KEY: "api_key",
         },
         workspaceDir: "/tmp/ocn8n-e2e",
-        pluginVersion: "0.2.0-e2e",
+        pluginVersion: "0.3.0-e2e",
       })
 
       expect(config.mcpUrl).toBe("http://127.0.0.1:5678/mcp-server/http")
