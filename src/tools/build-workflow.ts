@@ -105,7 +105,7 @@ export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkf
   }
 
   const missingCredentials = await resolveWorkflowCredentials(workflow, deps.credentialResolver)
-  const validateWorkflowCode = deps.mcp.validateWorkflowCode
+  const validateWorkflowCode = deps.mcp.validateWorkflowCode?.bind(deps.mcp)
   const mcpWarnings =
     draft.sdkCode.trim() && validateWorkflowCode
       ? await validateWorkflowWithMcp({ mcp: { validateWorkflowCode }, workflow, sdkCode: draft.sdkCode })

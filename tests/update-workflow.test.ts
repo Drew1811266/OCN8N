@@ -82,15 +82,19 @@ describe("updateWorkflow", () => {
       })),
     }
     const mcp = {
+      validationRequests: [] as string[],
       getSdkReference: vi.fn(async () => "SDK rules"),
       searchNodes: vi.fn(async () => "Slack node: n8n-nodes-base.slack"),
       getNodeTypes: vi.fn(async () => "Slack schema"),
-      validateWorkflowCode: vi.fn(async () => ({
-        valid: true,
-        errors: [],
-        warnings: [],
-        nodeCount: 2,
-      })),
+      validateWorkflowCode: vi.fn(async function (this: { validationRequests: string[] }, code: string) {
+        this.validationRequests.push(code)
+        return {
+          valid: true,
+          errors: [],
+          warnings: [],
+          nodeCount: 2,
+        }
+      }),
     }
     const previewStore = {
       save: vi.fn(async (preview) => ({
@@ -115,6 +119,7 @@ describe("updateWorkflow", () => {
     })
 
     expect(mcp.validateWorkflowCode).toHaveBeenCalledWith("const workflow = {}")
+    expect(mcp.validationRequests).toEqual(["const workflow = {}"])
     expect(previewStore.save).toHaveBeenCalled()
     expect(mcp.validateWorkflowCode.mock.invocationCallOrder[0]).toBeLessThan(
       previewStore.save.mock.invocationCallOrder[0],
