@@ -16,10 +16,17 @@ export function requiredEnv(env: Env, name: string): string {
   return value
 }
 
+function deriveMcpUrl(baseUrl: string): string {
+  const appRoot = baseUrl.replace(/\/api\/v\d+\/?$/i, "").replace(/\/+$/, "")
+
+  return `${appRoot}/mcp`
+}
+
 export function createE2eRuntimeConfig(input: E2eRuntimeConfigInput): PluginConfig {
   const baseUrl = requiredEnv(input.env, "N8N_E2E_BASE_URL")
   const apiKey = requiredEnv(input.env, "N8N_E2E_API_KEY")
-  const mcpUrl = input.env.N8N_E2E_MCP_URL ?? `${baseUrl.replace(/\/api\/v\d+\/?$/i, "")}/mcp`
+  const configuredMcpUrl = input.env.N8N_E2E_MCP_URL?.trim()
+  const mcpUrl = configuredMcpUrl || deriveMcpUrl(baseUrl)
   const mcpToken = input.env.N8N_E2E_MCP_TOKEN
 
   return {
@@ -37,8 +44,13 @@ export function createE2eRuntimeConfig(input: E2eRuntimeConfigInput): PluginConf
 
 export function redactSecrets(value: string): string {
   return value
-    .replace(/\b(apiKey|api[_-]?key|token|password|secret)=([^\s]+)/gi, "$1=[REDACTED]")
-    .replace(/\bN8N_E2E_API_KEY=([^\s]+)/g, "N8N_E2E_API_KEY=[REDACTED]")
-    .replace(/\bN8N_E2E_MCP_TOKEN=([^\s]+)/g, "N8N_E2E_MCP_TOKEN=[REDACTED]")
+    .replace(
+      /(["']?(?:apiKey|api[_-]?key|token|password|secret|N8N_E2E_API_KEY|N8N_E2E_MCP_TOKEN|X-N8N-API-KEY)["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,}]+)/gi,
+      (_match, prefix: string, rawValue: string) => {
+        const quote = rawValue.startsWith("\"") ? "\"" : rawValue.startsWith("'") ? "'" : ""
+
+        return `${prefix}${quote}[REDACTED]${quote}`
+      },
+    )
     .replace(/Authorization:\s*Bearer\s+[^\s]+/gi, "Authorization: Bearer [REDACTED]")
 }
