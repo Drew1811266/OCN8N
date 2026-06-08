@@ -158,10 +158,9 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
 
   const missingCredentials = await resolveWorkflowCredentials(proposedWorkflow, deps.credentialResolver)
   const validateWorkflowCode = deps.mcp.validateWorkflowCode?.bind(deps.mcp)
-  const mcpWarnings =
-    patchDraft.sdkCode.trim() && validateWorkflowCode
-      ? await validateWorkflowWithMcp({ mcp: { validateWorkflowCode }, workflow: proposedWorkflow, sdkCode: patchDraft.sdkCode })
-      : []
+  const mcpWarnings = validateWorkflowCode
+    ? await validateWorkflowWithMcp({ mcp: { validateWorkflowCode }, workflow: proposedWorkflow })
+    : []
   const preview = await previewStore.save({
     workflowId: deps.args.workflowId,
     baseWorkflowHash: stableHash(currentWorkflow),

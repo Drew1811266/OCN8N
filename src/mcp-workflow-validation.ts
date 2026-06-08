@@ -12,11 +12,10 @@ export type McpWorkflowValidator = {
 export type ValidateWorkflowWithMcpInput = {
   mcp: McpWorkflowValidator
   workflow: N8nWorkflow
-  sdkCode: string
 }
 
 export async function validateWorkflowWithMcp(input: ValidateWorkflowWithMcpInput): Promise<Warning[]> {
-  const result = await input.mcp.validateWorkflowCode(input.sdkCode)
+  const result = await input.mcp.validateWorkflowCode(workflowToMcpValidationCode(input.workflow))
 
   if (!result.valid) {
     throw new N8nBuilderError("n8n MCP workflow validation failed.", "MCP_WORKFLOW_VALIDATION_FAILED", {
@@ -37,6 +36,29 @@ export async function validateWorkflowWithMcp(input: ValidateWorkflowWithMcpInpu
     message: warning.message,
     nodeName: warning.nodeName,
   }))
+}
+
+export function workflowToMcpValidationCode(workflow: N8nWorkflow): string {
+  const validationWorkflow = {
+    name: workflow.name,
+    nodes: workflow.nodes.map((node) => ({
+      ...(node.id ? { id: node.id } : {}),
+      name: node.name,
+      type: node.type,
+      typeVersion: node.typeVersion,
+      position: node.position,
+      parameters: node.parameters,
+    })),
+    connections: workflow.connections,
+  }
+
+  return [
+    "import { Workflow } from '@n8n/workflow'",
+    "",
+    `const workflow = new Workflow(${JSON.stringify(validationWorkflow, null, 2)})`,
+    "",
+    "export default workflow",
+  ].join("\n")
 }
 
 function toDetailsWarning(warning: McpWorkflowValidationWarning): McpWorkflowValidationWarning {

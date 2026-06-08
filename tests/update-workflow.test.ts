@@ -118,8 +118,12 @@ describe("updateWorkflow", () => {
       now: () => now,
     })
 
-    expect(mcp.validateWorkflowCode).toHaveBeenCalledWith("const workflow = {}")
-    expect(mcp.validationRequests).toEqual(["const workflow = {}"])
+    expect(mcp.validateWorkflowCode).toHaveBeenCalledWith(expect.stringContaining("new Workflow"))
+    expect(mcp.validationRequests).toHaveLength(1)
+    expect(mcp.validationRequests[0]).toContain('"name": "Order webhook to Slack"')
+    expect(mcp.validationRequests[0]).toContain('"type": "n8n-nodes-base.webhook"')
+    expect(mcp.validationRequests[0]).toContain('"type": "n8n-nodes-base.slack"')
+    expect(mcp.validationRequests[0]).toContain('"Send Slack Alert"')
     expect(previewStore.save).toHaveBeenCalled()
     expect(mcp.validateWorkflowCode.mock.invocationCallOrder[0]).toBeLessThan(
       previewStore.save.mock.invocationCallOrder[0],
