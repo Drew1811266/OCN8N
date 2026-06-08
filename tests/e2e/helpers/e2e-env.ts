@@ -19,7 +19,7 @@ export function requiredEnv(env: Env, name: string): string {
 function deriveMcpUrl(baseUrl: string): string {
   const appRoot = baseUrl.replace(/\/api\/v\d+\/?$/i, "").replace(/\/+$/, "")
 
-  return `${appRoot}/mcp`
+  return `${appRoot}/mcp-server/http`
 }
 
 export function createE2eRuntimeConfig(input: E2eRuntimeConfigInput): PluginConfig {

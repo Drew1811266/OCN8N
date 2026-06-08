@@ -8,7 +8,7 @@ const projectName = process.env.N8N_E2E_PROJECT || "ocn8n-e2e"
 const port = process.env.N8N_E2E_PORT || "5678"
 const baseAppUrl = process.env.N8N_E2E_APP_URL || `http://127.0.0.1:${port}`
 const baseUrl = process.env.N8N_E2E_BASE_URL || `${baseAppUrl}/api/v1`
-const mcpUrl = process.env.N8N_E2E_MCP_URL || `${baseAppUrl}/mcp`
+const mcpUrl = process.env.N8N_E2E_MCP_URL || `${baseAppUrl}/mcp-server/http`
 const keepAlive = process.env.N8N_E2E_KEEP_ALIVE === "1"
 const removeVolumes = process.env.N8N_E2E_REMOVE_VOLUMES === "1"
 

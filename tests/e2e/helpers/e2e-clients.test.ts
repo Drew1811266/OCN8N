@@ -15,7 +15,7 @@ import {
 const baseConfig: PluginConfig = {
   baseUrl: "http://127.0.0.1:5678/api/v1",
   apiKey: "api-secret",
-  mcpUrl: "http://127.0.0.1:5678/mcp",
+  mcpUrl: "http://127.0.0.1:5678/mcp-server/http",
   mcpToken: "mcp-secret",
   workspaceDir: "/tmp/ocn8n-e2e-test",
   registryPath: "/tmp/ocn8n-e2e-test/.opencode/n8n-workflows.json",
