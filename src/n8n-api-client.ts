@@ -22,7 +22,7 @@ type N8nApiClientOptions = {
 }
 
 const credentialListExpected = "N8nCredentialSummary[] or { data: N8nCredentialSummary[], nextCursor?: string }"
-const workflowListExpected = "N8nWorkflow[] or { data: N8nWorkflow[], nextCursor?: string }"
+const workflowListExpected = "N8nWorkflow[] or { data: N8nWorkflow[], nextCursor?: string | null }"
 
 export class N8nApiClient {
   private readonly baseUrl: string
@@ -86,7 +86,7 @@ export class N8nApiClient {
       }
 
       workflows.push(...response.data)
-      cursor = response.nextCursor
+      cursor = response.nextCursor ?? undefined
     } while (cursor)
 
     return workflows
@@ -209,14 +209,16 @@ function isN8nWorkflowSummary(value: unknown): value is N8nWorkflow & { id: stri
   )
 }
 
-function isWorkflowListPage(value: unknown): value is { data: Array<N8nWorkflow & { id: string }>; nextCursor?: string } {
+function isWorkflowListPage(
+  value: unknown,
+): value is { data: Array<N8nWorkflow & { id: string }>; nextCursor?: string | null } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
 
   const page = value as Record<string, unknown>
   return (
     Array.isArray(page.data) &&
     page.data.every(isN8nWorkflowSummary) &&
-    (page.nextCursor === undefined || typeof page.nextCursor === "string")
+    (page.nextCursor === undefined || page.nextCursor === null || typeof page.nextCursor === "string")
   )
 }
 

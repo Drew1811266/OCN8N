@@ -219,6 +219,86 @@ describe("N8nApiClient", () => {
     )
   })
 
+  it("supports direct array workflow list responses", async () => {
+    const fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify([{ id: "wf_1", name: "One", active: false, nodes: [], connections: {}, settings: {} }]),
+        { status: 200 },
+      )
+    })
+    const client = new N8nApiClient({
+      baseUrl: "https://demo/api/v1/",
+      apiKey: "api_key",
+      fetch,
+    })
+
+    await expect(client.listWorkflows()).resolves.toEqual([
+      expect.objectContaining({ id: "wf_1", name: "One" }),
+    ])
+    expect(fetch).toHaveBeenCalledWith(
+      "https://demo/api/v1/workflows",
+      expect.objectContaining({ method: "GET" }),
+    )
+  })
+
+  it("treats null workflow cursors as the final page", async () => {
+    const fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          data: [{ id: "wf_1", name: "One", active: false, nodes: [], connections: {}, settings: {} }],
+          nextCursor: null,
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nApiClient({
+      baseUrl: "https://demo/api/v1",
+      apiKey: "api_key",
+      fetch,
+    })
+
+    await expect(client.listWorkflows()).resolves.toEqual([
+      expect.objectContaining({ id: "wf_1", name: "One" }),
+    ])
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledWith(
+      "https://demo/api/v1/workflows",
+      expect.objectContaining({ method: "GET" }),
+    )
+  })
+
+  it("throws a redacted parse error when successful workflow list body is malformed", async () => {
+    const fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          data: [{ id: "wf_1", name: "One", active: false, nodes: [], connections: {}, token: "secret" }],
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nApiClient({
+      baseUrl: "https://demo/api/v1",
+      apiKey: "api_key",
+      fetch,
+    })
+
+    let error: unknown
+    try {
+      await client.listWorkflows()
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toBeInstanceOf(N8nBuilderError)
+    expect((error as N8nBuilderError).code).toBe("N8N_API_PARSE_ERROR")
+    expect((error as N8nBuilderError).details).toEqual({
+      path: "/workflows",
+      expected: "N8nWorkflow[] or { data: N8nWorkflow[], nextCursor?: string | null }",
+    })
+    expect(JSON.stringify(error)).not.toContain("api_key")
+    expect(JSON.stringify(error)).not.toContain("secret")
+  })
+
   it("deletes workflows by id", async () => {
     const fetch = vi.fn(async () => new Response(null, { status: 204 }))
     const client = new N8nApiClient({
