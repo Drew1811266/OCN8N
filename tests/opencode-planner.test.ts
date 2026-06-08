@@ -1,7 +1,58 @@
 import { describe, expect, it, vi } from "vitest"
 import { N8nBuilderError } from "../src/errors.js"
 import { OpencodePlanner } from "../src/opencode-planner.js"
+import { workflowDraftSchema, workflowPatchDraftSchema } from "../src/workflow-plan.js"
 import { simpleWebhookPlan } from "./fixtures/workflows.js"
+
+describe("workflow draft schemas", () => {
+  it("parses workflow drafts with SDK validation code and node selection rationale", () => {
+    const draft = workflowDraftSchema.parse({
+      plan: simpleWebhookPlan,
+      sdkCode: "await validateWorkflow(workflow)",
+      nodeSelection: [
+        {
+          nodeType: "n8n-nodes-base.webhook",
+          reason: "Receives incoming order events.",
+        },
+      ],
+    })
+
+    expect(draft.plan).toEqual(simpleWebhookPlan)
+    expect(draft.sdkCode).toBe("await validateWorkflow(workflow)")
+    expect(draft.nodeSelection).toEqual([
+      {
+        nodeType: "n8n-nodes-base.webhook",
+        reason: "Receives incoming order events.",
+      },
+    ])
+  })
+
+  it("parses workflow patch drafts with replacement plan, SDK validation code, and node selection", () => {
+    const patchDraft = workflowPatchDraftSchema.parse({
+      summary: "Add Slack notification",
+      changes: ["Add Slack node"],
+      replacementPlan: simpleWebhookPlan,
+      sdkCode: "await validateWorkflow(workflow)",
+      nodeSelection: [
+        {
+          nodeType: "n8n-nodes-base.slack",
+          reason: "Sends order notifications to the fulfillment channel.",
+        },
+      ],
+    })
+
+    expect(patchDraft.summary).toBe("Add Slack notification")
+    expect(patchDraft.changes).toEqual(["Add Slack node"])
+    expect(patchDraft.replacementPlan).toEqual(simpleWebhookPlan)
+    expect(patchDraft.sdkCode).toBe("await validateWorkflow(workflow)")
+    expect(patchDraft.nodeSelection).toEqual([
+      {
+        nodeType: "n8n-nodes-base.slack",
+        reason: "Sends order notifications to the fulfillment channel.",
+      },
+    ])
+  })
+})
 
 describe("OpencodePlanner", () => {
   it("creates a session, requests JSON workflow plan output, and parses the result", async () => {

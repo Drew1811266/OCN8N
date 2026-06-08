@@ -33,6 +33,19 @@ export const workflowPlanSchema = z.object({
 
 export type WorkflowPlan = z.infer<typeof workflowPlanSchema>
 
+export const nodeSelectionSchema = z.object({
+  nodeType: z.string().min(1),
+  reason: z.string().min(1),
+})
+
+export const workflowDraftSchema = z.object({
+  plan: workflowPlanSchema,
+  sdkCode: z.string().min(1),
+  nodeSelection: z.array(nodeSelectionSchema).default([]),
+})
+
+export type WorkflowDraft = z.infer<typeof workflowDraftSchema>
+
 export const workflowPatchPlanSchema = z.object({
   summary: z.string().min(1),
   changes: z.array(z.string().min(1)),
@@ -40,3 +53,13 @@ export const workflowPatchPlanSchema = z.object({
 })
 
 export type WorkflowPatchPlan = z.infer<typeof workflowPatchPlanSchema>
+
+export const workflowPatchDraftSchema = z.object({
+  summary: z.string().min(1),
+  changes: z.array(z.string().min(1)),
+  replacementPlan: workflowPlanSchema,
+  sdkCode: z.string().min(1),
+  nodeSelection: z.array(nodeSelectionSchema).default([]),
+})
+
+export type WorkflowPatchDraft = z.infer<typeof workflowPatchDraftSchema>
