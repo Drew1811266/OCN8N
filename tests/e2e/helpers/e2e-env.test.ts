@@ -76,6 +76,24 @@ describe("e2e env helpers", () => {
     }
   })
 
+  it("redacts serialized authorization bearer values from diagnostics", () => {
+    const secretValues = ["json_bearer", "nested_bearer", "lowercase_bearer"]
+    const output = redactSecrets(
+      [
+        "\"Authorization\":\"Bearer json_bearer\"",
+        "{\"headers\":{\"Authorization\":\"Bearer nested_bearer\"}}",
+        "{\"headers\":{\"authorization\":\"Bearer lowercase_bearer\"}}",
+      ].join(" "),
+    )
+
+    expect(output).toContain("\"Authorization\":\"Bearer [REDACTED]\"")
+    expect(output).toContain("{\"headers\":{\"Authorization\":\"Bearer [REDACTED]\"}}")
+    expect(output).toContain("{\"headers\":{\"authorization\":\"Bearer [REDACTED]\"}}")
+    for (const secretValue of secretValues) {
+      expect(output).not.toContain(secretValue)
+    }
+  })
+
   it("derives default MCP URL when E2E MCP URL is empty or whitespace", () => {
     for (const mcpUrl of ["", "   "]) {
       const config = createE2eRuntimeConfig({

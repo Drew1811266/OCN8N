@@ -23,7 +23,7 @@ function deriveMcpUrl(baseUrl: string): string {
 }
 
 export function createE2eRuntimeConfig(input: E2eRuntimeConfigInput): PluginConfig {
-  const baseUrl = requiredEnv(input.env, "N8N_E2E_BASE_URL")
+  const baseUrl = requiredEnv(input.env, "N8N_E2E_BASE_URL").trim()
   const apiKey = requiredEnv(input.env, "N8N_E2E_API_KEY")
   const configuredMcpUrl = input.env.N8N_E2E_MCP_URL?.trim()
   const mcpUrl = configuredMcpUrl || deriveMcpUrl(baseUrl)
@@ -44,6 +44,14 @@ export function createE2eRuntimeConfig(input: E2eRuntimeConfigInput): PluginConf
 
 export function redactSecrets(value: string): string {
   return value
+    .replace(
+      /(["']?authorization["']?\s*:\s*)("Bearer\s+[^"]*"|'Bearer\s+[^']*'|Bearer\s+[^\s,}]+)/gi,
+      (_match, prefix: string, rawValue: string) => {
+        const quote = rawValue.startsWith("\"") ? "\"" : rawValue.startsWith("'") ? "'" : ""
+
+        return `${prefix}${quote}Bearer [REDACTED]${quote}`
+      },
+    )
     .replace(
       /(["']?(?:apiKey|api[_-]?key|token|password|secret|N8N_E2E_API_KEY|N8N_E2E_MCP_TOKEN|X-N8N-API-KEY)["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,}]+)/gi,
       (_match, prefix: string, rawValue: string) => {
