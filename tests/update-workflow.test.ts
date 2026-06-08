@@ -67,6 +67,113 @@ const otherBaseUrlRegistryRecord: WorkflowRegistryRecord = {
 }
 
 describe("updateWorkflow", () => {
+  it("validates patch draft SDK code with MCP before saving the preview", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => currentWorkflow),
+      updateWorkflow: vi.fn(),
+    }
+    const planner = {
+      createPatchDraft: vi.fn(async () => ({
+        summary: "Add Slack notification",
+        changes: ["Add Slack node"],
+        replacementPlan: simpleWebhookPlan,
+        sdkCode: "const workflow = {}",
+        nodeSelection: [],
+      })),
+    }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "Slack node: n8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "Slack schema"),
+      validateWorkflowCode: vi.fn(async () => ({
+        valid: true,
+        errors: [],
+        warnings: [],
+        nodeCount: 2,
+      })),
+    }
+    const previewStore = {
+      save: vi.fn(async (preview) => ({
+        previewId: "preview_1",
+        ...preview,
+      })),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await updateWorkflow({
+      args: { workflowId: "wf_1", mode: "preview", prompt: "Add Slack" },
+      config,
+      api,
+      planner,
+      mcp,
+      previewStore,
+      registry,
+      now: () => now,
+    })
+
+    expect(mcp.validateWorkflowCode).toHaveBeenCalledWith("const workflow = {}")
+    expect(previewStore.save).toHaveBeenCalled()
+    expect(mcp.validateWorkflowCode.mock.invocationCallOrder[0]).toBeLessThan(
+      previewStore.save.mock.invocationCallOrder[0],
+    )
+  })
+
+  it("throws and skips preview save and n8n update when MCP patch draft validation fails", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => currentWorkflow),
+      updateWorkflow: vi.fn(),
+    }
+    const planner = {
+      createPatchDraft: vi.fn(async () => ({
+        summary: "Add Slack notification",
+        changes: ["Add Slack node"],
+        replacementPlan: simpleWebhookPlan,
+        sdkCode: "const workflow = {}",
+        nodeSelection: [],
+      })),
+    }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "Slack node: n8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "Slack schema"),
+      validateWorkflowCode: vi.fn(async () => ({
+        valid: false,
+        errors: ["Invalid connection"],
+        warnings: [],
+      })),
+    }
+    const previewStore = {
+      save: vi.fn(async (preview) => ({
+        previewId: "preview_1",
+        ...preview,
+      })),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await expect(
+      updateWorkflow({
+        args: { workflowId: "wf_1", mode: "preview", prompt: "Add Slack" },
+        config,
+        api,
+        planner,
+        mcp,
+        previewStore,
+        registry,
+        now: () => now,
+      }),
+    ).rejects.toMatchObject({
+      code: "MCP_WORKFLOW_VALIDATION_FAILED",
+    } satisfies Partial<N8nBuilderError>)
+    expect(previewStore.save).not.toHaveBeenCalled()
+    expect(api.updateWorkflow).not.toHaveBeenCalled()
+  })
+
   it("previews an update without calling the n8n update API", async () => {
     const api = {
       getWorkflow: vi.fn(async () => currentWorkflow),

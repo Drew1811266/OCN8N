@@ -1,11 +1,12 @@
 import { N8nBuilderError } from "../errors.js"
 import { stableHash } from "../hash.js"
+import { validateWorkflowWithMcp, type McpWorkflowValidationResult } from "../mcp-workflow-validation.js"
 import type { PlannerContext } from "../opencode-planner.js"
 import type { WorkflowRegistryRecord } from "../registry.js"
 import type { CredentialGap, PluginConfig, Warning } from "../types.js"
 import { validateWorkflowForSave, type N8nWorkflow, type WorkflowIssue } from "../validator.js"
 import { compileWorkflowPlan } from "../workflow-compiler.js"
-import type { WorkflowPlan } from "../workflow-plan.js"
+import type { WorkflowDraft, WorkflowPlan } from "../workflow-plan.js"
 import { extractNodeTypeLookups, type NodeTypeLookup } from "./node-lookup.js"
 
 const managedBy = "opencode-n8n-builder" as const
@@ -35,13 +36,15 @@ export type BuildWorkflowDeps = {
     upsert(record: WorkflowRegistryRecord): Promise<void>
   }
   planner: {
-    createPlan(context: PlannerContext): Promise<WorkflowPlan>
+    createDraft?(context: PlannerContext): Promise<WorkflowDraft>
+    createPlan?(context: PlannerContext): Promise<WorkflowPlan>
   }
   mcp: {
     getSdkReference(section: string): Promise<string>
     searchNodes(query: string): Promise<string>
     getNodeTypes(nodeTypes: NodeTypeLookup[]): Promise<string>
     getSuggestedNodes?(categories: string[]): Promise<string>
+    validateWorkflowCode?(code: string): Promise<McpWorkflowValidationResult>
   }
   credentialResolver?: WorkflowCredentialResolver
   now?: () => Date
@@ -67,16 +70,16 @@ export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkf
       ? [{ nodeType: "selected", documentation: await deps.mcp.getNodeTypes(nodeTypes) }]
       : []
   const suggestedNodes = await getSuggestedNodesForPrompt(deps.mcp, deps.args.prompt)
-  const plan = await deps.planner.createPlan(
-    withSuggestedNodes(
-      {
-        prompt: deps.args.prompt,
-        sdkReference,
-        nodeDocumentation,
-      },
-      suggestedNodes,
-    ),
+  const plannerContext = withSuggestedNodes(
+    {
+      prompt: deps.args.prompt,
+      sdkReference,
+      nodeDocumentation,
+    },
+    suggestedNodes,
   )
+  const draft = await createWorkflowDraft(deps.planner, plannerContext)
+  const plan = draft.plan
   const compiledPlan: WorkflowPlan = {
     ...plan,
     name: deps.args.name ?? plan.name,
@@ -102,6 +105,11 @@ export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkf
   }
 
   const missingCredentials = await resolveWorkflowCredentials(workflow, deps.credentialResolver)
+  const validateWorkflowCode = deps.mcp.validateWorkflowCode
+  const mcpWarnings =
+    draft.sdkCode.trim() && validateWorkflowCode
+      ? await validateWorkflowWithMcp({ mcp: { validateWorkflowCode }, workflow, sdkCode: draft.sdkCode })
+      : []
   const created = await deps.api.createWorkflow(workflow)
   const url = workflowUrl(deps.config.baseUrl, created.id)
 
@@ -123,8 +131,27 @@ export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkf
     nodeCount: workflow.nodes.length,
     summary: plan.summary,
     missingCredentials,
-    warnings: validation.warnings.map(toWarning),
+    warnings: [...validation.warnings.map(toWarning), ...mcpWarnings],
   }
+}
+
+async function createWorkflowDraft(
+  planner: BuildWorkflowDeps["planner"],
+  context: PlannerContext,
+): Promise<WorkflowDraft> {
+  if (planner.createDraft) {
+    return planner.createDraft(context)
+  }
+
+  if (planner.createPlan) {
+    return {
+      plan: await planner.createPlan(context),
+      sdkCode: "",
+      nodeSelection: [],
+    }
+  }
+
+  throw new N8nBuilderError("Planner dependencies are not configured.", "BUILD_PLANNER_DEPS_MISSING")
 }
 
 async function resolveWorkflowCredentials(

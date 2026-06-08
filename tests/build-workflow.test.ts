@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { N8nBuilderError } from "../src/errors.js"
 import { buildWorkflow } from "../src/tools/build-workflow.js"
 import type { PluginConfig } from "../src/types.js"
-import type { WorkflowPlan } from "../src/workflow-plan.js"
+import type { WorkflowDraft, WorkflowPlan } from "../src/workflow-plan.js"
 import { simpleWebhookPlan } from "./fixtures/workflows.js"
 
 const config: PluginConfig = {
@@ -17,6 +17,86 @@ const config: PluginConfig = {
 }
 
 describe("buildWorkflow", () => {
+  it("validates draft SDK code with MCP before creating the workflow", async () => {
+    const api = {
+      createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
+    }
+    const registry = { upsert: vi.fn(async () => undefined) }
+    const draft: WorkflowDraft = {
+      plan: simpleWebhookPlan,
+      sdkCode: "const workflow = {}",
+      nodeSelection: [],
+    }
+    const planner = { createDraft: vi.fn(async () => draft) }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "n8n-nodes-base.webhook"),
+      getNodeTypes: vi.fn(async () => "node schemas"),
+      validateWorkflowCode: vi.fn(async () => ({
+        valid: true,
+        errors: [],
+        warnings: [],
+        nodeCount: 2,
+      })),
+    }
+
+    await buildWorkflow({
+      args: { prompt: "Build an order webhook" },
+      config,
+      api,
+      registry,
+      planner,
+      mcp,
+      now: () => new Date("2026-06-04T00:00:00.000Z"),
+    })
+
+    expect(mcp.validateWorkflowCode).toHaveBeenCalledWith("const workflow = {}")
+    expect(api.createWorkflow).toHaveBeenCalled()
+    expect(mcp.validateWorkflowCode.mock.invocationCallOrder[0]).toBeLessThan(
+      api.createWorkflow.mock.invocationCallOrder[0],
+    )
+  })
+
+  it("throws and skips create and registry upsert when MCP draft validation fails", async () => {
+    const api = {
+      createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
+    }
+    const registry = { upsert: vi.fn(async () => undefined) }
+    const planner = {
+      createDraft: vi.fn(async () => ({
+        plan: simpleWebhookPlan,
+        sdkCode: "const workflow = {}",
+        nodeSelection: [],
+      })),
+    }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "n8n-nodes-base.webhook"),
+      getNodeTypes: vi.fn(async () => "node schemas"),
+      validateWorkflowCode: vi.fn(async () => ({
+        valid: false,
+        errors: ["Invalid connection"],
+        warnings: [],
+      })),
+    }
+
+    await expect(
+      buildWorkflow({
+        args: { prompt: "Build an order webhook" },
+        config,
+        api,
+        registry,
+        planner,
+        mcp,
+        now: () => new Date("2026-06-04T00:00:00.000Z"),
+      }),
+    ).rejects.toMatchObject({
+      code: "MCP_WORKFLOW_VALIDATION_FAILED",
+    } satisfies Partial<N8nBuilderError>)
+    expect(api.createWorkflow).not.toHaveBeenCalled()
+    expect(registry.upsert).not.toHaveBeenCalled()
+  })
+
   it("creates an inactive managed workflow and records it", async () => {
     const api = {
       createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),

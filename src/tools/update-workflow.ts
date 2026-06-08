@@ -1,13 +1,14 @@
 import type { ApiPluginConfig } from "../config.js"
 import { N8nBuilderError } from "../errors.js"
 import { stableHash } from "../hash.js"
+import { validateWorkflowWithMcp, type McpWorkflowValidationResult } from "../mcp-workflow-validation.js"
 import type { PatchPlannerContext } from "../opencode-planner.js"
 import type { SaveUpdatePreviewInput, UpdatePreview } from "../preview-store.js"
 import type { WorkflowRegistryRecord } from "../registry.js"
 import type { CredentialGap, Warning } from "../types.js"
 import { validateWorkflowForSave, type N8nWorkflow, type WorkflowIssue } from "../validator.js"
 import { compileWorkflowPlan } from "../workflow-compiler.js"
-import type { WorkflowPatchPlan } from "../workflow-plan.js"
+import type { WorkflowPatchDraft, WorkflowPatchPlan } from "../workflow-plan.js"
 import { extractNodeTypeLookups, type NodeTypeLookup } from "./node-lookup.js"
 
 const managedBy = "opencode-n8n-builder" as const
@@ -37,13 +38,15 @@ export type UpdateWorkflowDeps = {
     updateWorkflow?(workflowId: string, workflow: N8nWorkflow): Promise<N8nWorkflow & { id: string }>
   }
   planner?: {
-    createPatchPlan(context: PatchPlannerContext): Promise<WorkflowPatchPlan>
+    createPatchDraft?(context: PatchPlannerContext): Promise<WorkflowPatchDraft>
+    createPatchPlan?(context: PatchPlannerContext): Promise<WorkflowPatchPlan>
   }
   mcp?: {
     getSdkReference(section: string): Promise<string>
     searchNodes(query: string): Promise<string>
     getNodeTypes(nodeTypes: NodeTypeLookup[]): Promise<string>
     getSuggestedNodes?(categories: string[]): Promise<string>
+    validateWorkflowCode?(code: string): Promise<McpWorkflowValidationResult>
   }
   previewStore?: {
     save?(input: SaveUpdatePreviewInput): Promise<UpdatePreview>
@@ -117,19 +120,18 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
       : []
   const suggestedNodes = await getSuggestedNodesForPrompt(deps.mcp, deps.args.prompt)
 
-  const patchPlan = await deps.planner.createPatchPlan(
-    withSuggestedNodes(
-      {
-        prompt: deps.args.prompt,
-        currentWorkflowJson: JSON.stringify(currentWorkflow, null, 2),
-        sdkReference,
-        nodeDocumentation,
-      },
-      suggestedNodes,
-    ),
+  const plannerContext = withSuggestedNodes(
+    {
+      prompt: deps.args.prompt,
+      currentWorkflowJson: JSON.stringify(currentWorkflow, null, 2),
+      sdkReference,
+      nodeDocumentation,
+    },
+    suggestedNodes,
   )
+  const patchDraft = await createWorkflowPatchDraft(deps.planner, plannerContext)
   const compiledWorkflow = compileWorkflowPlan({
-    plan: patchPlan.replacementPlan,
+    plan: patchDraft.replacementPlan,
     marker: {
       managedBy,
       managedByVersion: deps.config.pluginVersion,
@@ -155,12 +157,17 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
   }
 
   const missingCredentials = await resolveWorkflowCredentials(proposedWorkflow, deps.credentialResolver)
+  const validateWorkflowCode = deps.mcp.validateWorkflowCode
+  const mcpWarnings =
+    patchDraft.sdkCode.trim() && validateWorkflowCode
+      ? await validateWorkflowWithMcp({ mcp: { validateWorkflowCode }, workflow: proposedWorkflow, sdkCode: patchDraft.sdkCode })
+      : []
   const preview = await previewStore.save({
     workflowId: deps.args.workflowId,
     baseWorkflowHash: stableHash(currentWorkflow),
     proposedWorkflowHash: stableHash(proposedWorkflow),
-    summary: patchPlan.summary,
-    changes: patchPlan.changes,
+    summary: patchDraft.summary,
+    changes: patchDraft.changes,
     proposedWorkflow,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + previewTtlMs).toISOString(),
@@ -172,11 +179,31 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     url: workflowUrl(deps.config.baseUrl, deps.args.workflowId),
     mode: "preview",
     previewId: preview.previewId,
-    summary: patchPlan.summary,
-    changes: patchPlan.changes,
+    summary: patchDraft.summary,
+    changes: patchDraft.changes,
     missingCredentials,
-    warnings: proposedValidation.warnings.map(toWarning),
+    warnings: [...proposedValidation.warnings.map(toWarning), ...mcpWarnings],
   }
+}
+
+async function createWorkflowPatchDraft(
+  planner: NonNullable<UpdateWorkflowDeps["planner"]>,
+  context: PatchPlannerContext,
+): Promise<WorkflowPatchDraft> {
+  if (planner.createPatchDraft) {
+    return planner.createPatchDraft(context)
+  }
+
+  if (planner.createPatchPlan) {
+    const patchPlan = await planner.createPatchPlan(context)
+    return {
+      ...patchPlan,
+      sdkCode: "",
+      nodeSelection: [],
+    }
+  }
+
+  throw new N8nBuilderError("Preview planner dependencies are not configured.", "UPDATE_PREVIEW_DEPS_MISSING")
 }
 
 async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult> {
