@@ -87,6 +87,60 @@ describe("loadPluginConfig", () => {
     expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
   })
 
+  it("loads optional MCP token from environment", () => {
+    const config = loadPluginConfig({
+      env: {
+        N8N_BASE_URL: "https://demo/api/v1",
+        N8N_API_KEY: "api_key",
+        N8N_MCP_URL: "https://demo/mcp",
+        N8N_MCP_TOKEN: "mcp_token",
+      },
+      opencodeConfig: {},
+      workspaceDir: "/tmp/project",
+      pluginVersion: "0.2.0",
+    })
+
+    expect(config.mcpToken).toBe("mcp_token")
+  })
+
+  it("lets opencode MCP token override environment token", () => {
+    const config = loadPluginConfig({
+      env: {
+        N8N_BASE_URL: "https://demo/api/v1",
+        N8N_API_KEY: "api_key",
+        N8N_MCP_URL: "https://demo/mcp",
+        N8N_MCP_TOKEN: "env_token",
+      },
+      opencodeConfig: {
+        n8n: {
+          mcpToken: "config_token",
+        },
+      },
+      workspaceDir: "/tmp/project",
+      pluginVersion: "0.2.0",
+    })
+
+    expect(config.mcpToken).toBe("config_token")
+  })
+
+  it("rejects non-string MCP token config", () => {
+    expect(() =>
+      loadPluginConfig({
+        env: {
+          N8N_BASE_URL: "https://demo/api/v1",
+          N8N_API_KEY: "api_key",
+          N8N_MCP_URL: "https://demo/mcp",
+        },
+        opencodeConfig: {
+          n8n: {
+            mcpToken: 123,
+          },
+        },
+        workspaceDir: "/tmp/project",
+      }),
+    ).toThrow("Invalid n8n configuration: n8n.mcpToken must be a string.")
+  })
+
   it("loads credential mappings from OpenCode config", () => {
     const config = loadPluginConfig({
       env: requiredEnv,

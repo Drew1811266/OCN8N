@@ -10,6 +10,7 @@ export type PluginConfig = {
   baseUrl: string
   apiKey: string
   mcpUrl: string
+  mcpToken?: string
   workspaceDir: string
   registryPath: string
   previewDir: string

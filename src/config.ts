@@ -14,6 +14,7 @@ type OpencodeN8nConfig = {
     baseUrl?: string
     apiKey?: string
     mcpUrl?: string
+    mcpToken?: string
     credentialEnv?: Record<string, CredentialEnvMapping>
     projectId?: string
     folderId?: string
@@ -33,9 +34,9 @@ export type LocalPluginConfig = Pick<
   | "pluginVersion"
 >
 
-export type ApiPluginConfig = Omit<PluginConfig, "mcpUrl">
+export type ApiPluginConfig = Omit<PluginConfig, "mcpUrl" | "mcpToken">
 
-const optionalStringFields = ["baseUrl", "apiKey", "mcpUrl", "projectId", "folderId"] as const
+const optionalStringFields = ["baseUrl", "apiKey", "mcpUrl", "mcpToken", "projectId", "folderId"] as const
 
 function isPlainObject(value: unknown): value is PlainRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
@@ -122,6 +123,7 @@ function asOpencodeN8nConfig(value: unknown): OpencodeN8nConfig {
       baseUrl: readOptionalString(n8n, "baseUrl"),
       apiKey: readOptionalString(n8n, "apiKey"),
       mcpUrl: readOptionalString(n8n, "mcpUrl"),
+      mcpToken: readOptionalString(n8n, "mcpToken"),
       credentialEnv: readCredentialEnv(n8n.credentialEnv),
       projectId: readOptionalString(n8n, "projectId"),
       folderId: readOptionalString(n8n, "folderId"),
@@ -136,6 +138,7 @@ export function loadPluginConfig(input: LoadPluginConfigInput): PluginConfig {
   const baseUrl = n8n.baseUrl ?? input.env.N8N_BASE_URL
   const apiKey = n8n.apiKey ?? input.env.N8N_API_KEY
   const mcpUrl = n8n.mcpUrl ?? input.env.N8N_MCP_URL
+  const mcpToken = n8n.mcpToken ?? input.env.N8N_MCP_TOKEN
 
   requireConfigValues([
     ["N8N_BASE_URL", baseUrl],
@@ -148,6 +151,7 @@ export function loadPluginConfig(input: LoadPluginConfigInput): PluginConfig {
     baseUrl: baseUrl as string,
     apiKey: apiKey as string,
     mcpUrl: mcpUrl as string,
+    ...(mcpToken ? { mcpToken } : {}),
   }
 }
 
