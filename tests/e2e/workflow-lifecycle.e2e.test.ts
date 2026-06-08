@@ -6,7 +6,12 @@ import { listManagedWorkflows } from "../../src/tools/list-managed-workflows.js"
 import { updateWorkflow } from "../../src/tools/update-workflow.js"
 import type { N8nWorkflow } from "../../src/validator.js"
 import { cleanupE2eContext, createE2eContext, trackWorkflow, type E2eContext } from "./helpers/e2e-clients.js"
-import { e2eManualSetPlan, e2eUpdatedManualIfPlan } from "./helpers/test-workflows.js"
+import {
+  e2eManualSetPlan,
+  e2eManualSetSdkCode,
+  e2eUpdatedManualIfPlan,
+  e2eUpdatedManualIfSdkCode,
+} from "./helpers/test-workflows.js"
 
 let context: E2eContext | undefined
 
@@ -22,8 +27,38 @@ afterEach(async () => {
 
 function deterministicPlanner() {
   return {
-    createPlan: async () => e2eManualSetPlan,
-    createPatchPlan: async () => e2eUpdatedManualIfPlan,
+    createDraft: async () => ({
+      plan: e2eManualSetPlan,
+      sdkCode: e2eManualSetSdkCode,
+      nodeSelection: [
+        {
+          nodeType: "n8n-nodes-base.manualTrigger",
+          reason: "Starts the workflow manually.",
+        },
+        {
+          nodeType: "n8n-nodes-base.set",
+          reason: "Creates deterministic test data.",
+        },
+      ],
+    }),
+    createPatchDraft: async () => ({
+      ...e2eUpdatedManualIfPlan,
+      sdkCode: e2eUpdatedManualIfSdkCode,
+      nodeSelection: [
+        {
+          nodeType: "n8n-nodes-base.manualTrigger",
+          reason: "Preserves the manual workflow entry point.",
+        },
+        {
+          nodeType: "n8n-nodes-base.set",
+          reason: "Preserves deterministic test data creation.",
+        },
+        {
+          nodeType: "n8n-nodes-base.if",
+          reason: "Branches on the generated message.",
+        },
+      ],
+    }),
   }
 }
 

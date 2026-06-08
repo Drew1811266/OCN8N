@@ -3,10 +3,12 @@ import { compileWorkflowPlan } from "../../../src/workflow-compiler.js"
 import { workflowPatchPlanSchema, workflowPlanSchema, type WorkflowPlan } from "../../../src/workflow-plan.js"
 import type { N8nWorkflowNode } from "../../../src/validator.js"
 import {
+  e2eManualSetSdkCode,
   e2eManualSetPlan,
-  e2eWebhookSetPlan,
   e2eScheduleHttpIfPlan,
+  e2eUpdatedManualIfSdkCode,
   e2eUpdatedManualIfPlan,
+  e2eWebhookSetPlan,
 } from "./test-workflows.js"
 
 const e2eMarker = {
@@ -29,6 +31,17 @@ function getNodeByName(nodes: N8nWorkflowNode[], name: string): N8nWorkflowNode 
 }
 
 describe("e2e workflow fixtures", () => {
+  it("provides SDK code fixtures without embedded secrets", () => {
+    for (const sdkCode of [e2eManualSetSdkCode, e2eUpdatedManualIfSdkCode]) {
+      expect(sdkCode).toContain("export default workflow")
+      expect(sdkCode).toContain("n8n-nodes-base.manualTrigger")
+      expect(sdkCode).toContain("n8n-nodes-base.set")
+      expect(sdkCode).not.toMatch(/apiKey|Bearer|secret/i)
+    }
+
+    expect(e2eUpdatedManualIfSdkCode).toContain("n8n-nodes-base.if")
+  })
+
   it("validates all base plans against workflowPlanSchema", () => {
     for (const plan of [e2eManualSetPlan, e2eWebhookSetPlan, e2eScheduleHttpIfPlan]) {
       expect(() => workflowPlanSchema.parse(plan)).not.toThrow()

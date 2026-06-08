@@ -40,6 +40,58 @@ export const e2eManualSetPlan: WorkflowPlan = workflowPlanSchema.parse({
   connections: [{ from: "manual", to: "set" }],
 })
 
+export const e2eManualSetSdkCode = `
+import { Workflow } from '@n8n/workflow'
+
+const workflow = new Workflow({
+  name: 'OCN8N E2E Manual Set',
+  nodes: [
+    {
+      id: 'manual-trigger',
+      name: 'Manual Trigger',
+      type: 'n8n-nodes-base.manualTrigger',
+      typeVersion: 1,
+      position: [0, 0],
+      parameters: {},
+    },
+    {
+      id: 'set-fields',
+      name: 'Set Fields',
+      type: 'n8n-nodes-base.set',
+      typeVersion: 3.4,
+      position: [280, 0],
+      parameters: {
+        assignments: {
+          assignments: [
+            {
+              id: 'message',
+              name: 'message',
+              type: 'string',
+              value: 'created by opencode',
+            },
+          ],
+        },
+      },
+    },
+  ],
+  connections: {
+    'Manual Trigger': {
+      main: [
+        [
+          {
+            node: 'Set Fields',
+            type: 'main',
+            index: 0,
+          },
+        ],
+      ],
+    },
+  },
+})
+
+export default workflow
+`.trim()
+
 export const e2eWebhookSetPlan: WorkflowPlan = workflowPlanSchema.parse({
   name: "OCN8N E2E Webhook Set",
   summary: "Webhook trigger normalizes an incoming payload.",
@@ -191,3 +243,94 @@ export const e2eUpdatedManualIfPlan: WorkflowPatchPlan = workflowPatchPlanSchema
     ],
   },
 })
+
+export const e2eUpdatedManualIfSdkCode = `
+import { Workflow } from '@n8n/workflow'
+
+const workflow = new Workflow({
+  name: 'OCN8N E2E Manual Set Updated',
+  nodes: [
+    {
+      id: 'manual-trigger',
+      name: 'Manual Trigger',
+      type: 'n8n-nodes-base.manualTrigger',
+      typeVersion: 1,
+      position: [0, 0],
+      parameters: {},
+    },
+    {
+      id: 'set-fields',
+      name: 'Set Fields',
+      type: 'n8n-nodes-base.set',
+      typeVersion: 3.4,
+      position: [280, 0],
+      parameters: {
+        assignments: {
+          assignments: [
+            {
+              id: 'message',
+              name: 'message',
+              type: 'string',
+              value: 'created by opencode',
+            },
+          ],
+        },
+      },
+    },
+    {
+      id: 'if-message',
+      name: 'IF Message',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2,
+      position: [560, 0],
+      parameters: {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            leftValue: '',
+            typeValidation: 'strict',
+          },
+          conditions: [
+            {
+              id: 'message-check',
+              leftValue: '={{ $json.message }}',
+              rightValue: 'created by opencode',
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+          ],
+          combinator: 'and',
+        },
+      },
+    },
+  ],
+  connections: {
+    'Manual Trigger': {
+      main: [
+        [
+          {
+            node: 'Set Fields',
+            type: 'main',
+            index: 0,
+          },
+        ],
+      ],
+    },
+    'Set Fields': {
+      main: [
+        [
+          {
+            node: 'IF Message',
+            type: 'main',
+            index: 0,
+          },
+        ],
+      ],
+    },
+  },
+})
+
+export default workflow
+`.trim()
