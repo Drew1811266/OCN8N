@@ -55,10 +55,10 @@ describe("e2e client helpers", () => {
     }
   })
 
-  it("deletes each tracked workflow once in reverse order and reports sanitized failures", async () => {
+  it("deletes each tracked workflow once in reverse order and reports sanitized aggregate failures", async () => {
     const attemptedWorkflowIds: string[] = []
     const context = createTestContext({
-      createdWorkflowIds: ["first", "bad", "first", "missing"],
+      createdWorkflowIds: ["first", "bad", "first", "worse", "missing", "worse"],
       deleteWorkflow: async (workflowId) => {
         attemptedWorkflowIds.push(workflowId)
         if (workflowId === "missing") {
@@ -66,6 +66,9 @@ describe("e2e client helpers", () => {
         }
         if (workflowId === "bad") {
           throw new Error("delete failed api-secret mcp-secret token=visible_secret")
+        }
+        if (workflowId === "worse") {
+          throw new Error("second delete failed api-secret password: second_secret")
         }
       },
     })
@@ -77,15 +80,19 @@ describe("e2e client helpers", () => {
       thrown = error
     }
 
-    expect(attemptedWorkflowIds).toEqual(["missing", "first", "bad"])
-    expect(thrown).toBeInstanceOf(Error)
+    expect(attemptedWorkflowIds).toEqual(["worse", "missing", "first", "bad"])
+    expect(thrown).toBeInstanceOf(AggregateError)
     const message = (thrown as Error).message
-    expect(message).toContain("Failed to delete 1 E2E workflow")
+    expect(message).toContain("Failed to delete 2 E2E workflows")
     expect(message).toContain("bad")
+    expect(message).toContain("worse")
     expect(message).toContain("[REDACTED]")
-    expect(message).not.toContain("api-secret")
-    expect(message).not.toContain("mcp-secret")
-    expect(message).not.toContain("visible_secret")
+    const childMessages = aggregateErrorMessages(thrown)
+    expect(childMessages).toHaveLength(2)
+    expect(childMessages.join("\n")).toContain("bad")
+    expect(childMessages.join("\n")).toContain("worse")
+    expectSanitized(childMessages.join("\n"))
+    expectSanitized(message)
     expect(message).not.toContain("missing")
   })
 
@@ -113,7 +120,7 @@ describe("e2e client helpers", () => {
     await expect(stat(workspaceDir)).rejects.toMatchObject({ code: "ENOENT" })
   })
 
-  it("rethrows workflow cleanup errors when workspace removal also fails", async () => {
+  it("reports both workflow and workspace cleanup failures when both phases fail", async () => {
     const context = createTestContext({
       workspaceDir: "\0",
       createdWorkflowIds: ["leaky-workflow"],
@@ -122,7 +129,24 @@ describe("e2e client helpers", () => {
       },
     })
 
-    await expect(cleanupE2eContext(context)).rejects.toThrow("Failed to delete 1 E2E workflow")
+    let thrown: unknown
+    try {
+      await cleanupE2eContext(context)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError)
+    expect((thrown as Error).message).toContain("Failed to clean up E2E context")
+    expect((thrown as Error).message).toContain("workflow cleanup failed")
+    expect((thrown as Error).message).toContain("workspace cleanup failed")
+    const childMessages = aggregateErrorMessages(thrown)
+    expect(childMessages).toHaveLength(2)
+    expect(childMessages[0]).toContain("workflow cleanup failed")
+    expect(childMessages[0]).toContain("Failed to delete 1 E2E workflow")
+    expect(childMessages[1]).toContain("workspace cleanup failed")
+    expect(childMessages[1]).toContain("path")
+    expectSanitized(childMessages.join("\n"))
   })
 
   it("tracks each workflow ID once", () => {
@@ -172,4 +196,19 @@ async function removeTempDirs(prefix: string): Promise<void> {
   for (const directory of await findTempDirs(prefix)) {
     await rm(directory, { recursive: true, force: true })
   }
+}
+
+function aggregateErrorMessages(error: unknown): string[] {
+  expect(error).toBeInstanceOf(AggregateError)
+
+  return (error as AggregateError & { errors: unknown[] }).errors.map((childError) =>
+    childError instanceof Error ? childError.message : String(childError),
+  )
+}
+
+function expectSanitized(value: string): void {
+  expect(value).not.toContain("api-secret")
+  expect(value).not.toContain("mcp-secret")
+  expect(value).not.toContain("visible_secret")
+  expect(value).not.toContain("second_secret")
 }

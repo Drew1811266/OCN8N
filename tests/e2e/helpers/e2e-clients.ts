@@ -105,6 +105,16 @@ export async function cleanupE2eContext(context: E2eContext): Promise<void> {
     workspaceCleanupError = error
   }
 
+  if (workflowCleanupError && workspaceCleanupError) {
+    throw new AggregateError(
+      [
+        cleanupPhaseError("workflow cleanup", workflowCleanupError, context.config),
+        cleanupPhaseError("workspace cleanup", workspaceCleanupError, context.config),
+      ],
+      "Failed to clean up E2E context: workflow cleanup failed; workspace cleanup failed",
+    )
+  }
+
   if (workflowCleanupError) {
     throw workflowCleanupError
   }
@@ -157,4 +167,8 @@ function sanitizeCleanupError(error: unknown, config: PluginConfig): string {
 
 async function removeWorkspaceDir(workspaceDir: string): Promise<void> {
   await rm(workspaceDir, { recursive: true, force: true })
+}
+
+function cleanupPhaseError(phase: string, error: unknown, config: PluginConfig): Error {
+  return new Error(`${phase} failed: ${sanitizeCleanupError(error, config)}`)
 }
