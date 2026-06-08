@@ -1,0 +1,22 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:1.95.3
+    ports:
+      - "${N8N_E2E_PORT:-5678}:5678"
+    environment:
+      N8N_HOST: "0.0.0.0"
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: "http"
+      N8N_ENCRYPTION_KEY: "opencode-n8n-builder-e2e-encryption-key"
+      N8N_USER_MANAGEMENT_DISABLED: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_TEMPLATES_ENABLED: "false"
+      N8N_PUBLIC_API_DISABLED: "false"
+      WEBHOOK_URL: "http://localhost:${N8N_E2E_PORT:-5678}/"
+    volumes:
+      - ocn8n-e2e-data:/home/node/.n8n
+
+volumes:
+  ocn8n-e2e-data:
