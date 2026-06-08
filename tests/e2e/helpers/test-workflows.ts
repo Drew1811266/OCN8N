@@ -21,7 +21,7 @@ export const e2eManualSetPlan: WorkflowPlan = workflowPlanSchema.parse({
       key: "set",
       name: "Set Fields",
       type: "n8n-nodes-base.set",
-      typeVersion: 3,
+      typeVersion: 3.4,
       position: [280, 0],
       parameters: {
         assignments: {
@@ -60,7 +60,7 @@ export const e2eWebhookSetPlan: WorkflowPlan = workflowPlanSchema.parse({
       key: "set",
       name: "Set Payload",
       type: "n8n-nodes-base.set",
-      typeVersion: 3,
+      typeVersion: 3.4,
       position: [280, 0],
       parameters: {
         assignments: {
@@ -104,7 +104,13 @@ export const e2eScheduleHttpIfPlan: WorkflowPlan = workflowPlanSchema.parse({
       parameters: {
         method: "GET",
         url: "https://example.com",
-        responseFormat: "text",
+        options: {
+          response: {
+            response: {
+              responseFormat: "text",
+            },
+          },
+        },
       },
     },
     {
