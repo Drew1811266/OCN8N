@@ -6,6 +6,7 @@ import { redactSecrets } from "./helpers/e2e-env.js"
 describe("n8n MCP E2E", () => {
   it("calls official workflow builder MCP tools with plugin argument shapes", async () => {
     let context: E2eContext | undefined
+    let testError: Error | undefined
 
     try {
       context = await createE2eContext()
@@ -22,21 +23,61 @@ describe("n8n MCP E2E", () => {
       expect(searchResult).toMatch(/manual|trigger|set|n8n-nodes-base/i)
       expect(nodeTypes).toMatch(/manual|trigger|set|n8n-nodes-base/i)
     } catch (error) {
-      const configuredMcpUrl = context?.config.mcpUrl ?? process.env.N8N_E2E_MCP_URL ?? "(not configured)"
-      const diagnostic = [
-        "n8n MCP E2E failed.",
-        `Configured MCP URL: ${configuredMcpUrl}`,
-        "Expected official workflow-builder MCP tools: get_sdk_reference, search_nodes, and get_node_types.",
-        "Expected argument shapes: get_sdk_reference { section }, search_nodes { queries: [...] }, get_node_types { nodeIds: [...] }.",
-        "If the MCP endpoint requires auth, set N8N_E2E_MCP_TOKEN and rerun npm run test:e2e.",
-        String(error),
-      ].join("\n")
+      testError = createMcpDiagnosticError(error, context)
+    }
 
-      throw new Error(redactSecrets(diagnostic))
-    } finally {
-      if (context) {
+    let cleanupError: Error | undefined
+    if (context) {
+      try {
         await cleanupE2eContext(context)
+      } catch (error) {
+        cleanupError = createCleanupDiagnosticError(error, context)
       }
+    }
+
+    if (testError && cleanupError) {
+      throw new AggregateError(
+        [testError, cleanupError],
+        sanitizeDiagnostic("n8n MCP E2E failed and cleanup also failed.", context),
+      )
+    }
+
+    if (testError) {
+      throw testError
+    }
+
+    if (cleanupError) {
+      throw cleanupError
     }
   })
 })
+
+function createMcpDiagnosticError(error: unknown, context: E2eContext | undefined): Error {
+  const configuredMcpUrl = context?.config.mcpUrl ?? process.env.N8N_E2E_MCP_URL ?? "(not configured)"
+  const diagnostic = [
+    "n8n MCP E2E failed.",
+    `Configured MCP URL: ${configuredMcpUrl}`,
+    "Expected official workflow-builder MCP tools: get_sdk_reference, search_nodes, and get_node_types.",
+    "Expected argument shapes: get_sdk_reference { section }, search_nodes { queries: [...] }, get_node_types { nodeIds: [...] }.",
+    "If the MCP endpoint requires auth, set N8N_E2E_MCP_TOKEN and rerun npm run test:e2e.",
+    String(error),
+  ].join("\n")
+
+  return new Error(sanitizeDiagnostic(diagnostic, context))
+}
+
+function createCleanupDiagnosticError(error: unknown, context: E2eContext): Error {
+  return new Error(sanitizeDiagnostic(`n8n MCP E2E cleanup failed.\n${String(error)}`, context))
+}
+
+function sanitizeDiagnostic(value: string, context: E2eContext | undefined): string {
+  let sanitized = redactSecrets(value)
+
+  for (const secret of [context?.config.apiKey, context?.config.mcpToken]) {
+    if (secret) {
+      sanitized = sanitized.split(secret).join("[REDACTED]")
+    }
+  }
+
+  return sanitized
+}
