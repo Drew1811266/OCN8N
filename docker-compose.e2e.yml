@@ -2,7 +2,7 @@ services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:1.95.3
     ports:
-      - "${N8N_E2E_PORT:-5678}:5678"
+      - "127.0.0.1:${N8N_E2E_PORT:-5678}:5678"
     environment:
       N8N_HOST: "0.0.0.0"
       N8N_PORT: "5678"

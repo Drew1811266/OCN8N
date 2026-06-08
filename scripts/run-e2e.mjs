@@ -10,6 +10,7 @@ const baseAppUrl = process.env.N8N_E2E_APP_URL || `http://127.0.0.1:${port}`
 const baseUrl = process.env.N8N_E2E_BASE_URL || `${baseAppUrl}/api/v1`
 const mcpUrl = process.env.N8N_E2E_MCP_URL || `${baseAppUrl}/mcp`
 const keepAlive = process.env.N8N_E2E_KEEP_ALIVE === "1"
+const removeVolumes = process.env.N8N_E2E_REMOVE_VOLUMES === "1"
 
 const env = {
   ...process.env,
@@ -24,6 +25,15 @@ const env = {
 let stackTouched = false
 
 main().catch(async (error) => {
+  if (error instanceof MissingApiKeyError) {
+    console.error(redact(error.message))
+    console.error("")
+    console.error(`n8n E2E stack kept running at ${baseAppUrl} so you can create a test API key.`)
+    console.error(`Stop it with: docker compose -p ${projectName} -f ${composeFile} down`)
+    console.error(`Remove its data with: docker compose -p ${projectName} -f ${composeFile} down --volumes`)
+    process.exit(1)
+  }
+
   console.error(redact(String(error?.stack || error?.message || error)))
 
   if (stackTouched && !keepAlive) {
@@ -45,7 +55,7 @@ async function main() {
   await runVitest()
 
   if (!keepAlive) {
-    await compose(["down", "--volumes", "--remove-orphans"], { printOutput: true })
+    await compose(successfulDownArgs(), { printOutput: true })
   } else {
     console.log(`n8n E2E stack kept running at ${baseAppUrl}`)
   }
@@ -85,7 +95,7 @@ async function waitForN8n() {
 
 async function assertApiKeyConfigured() {
   if (!env.N8N_E2E_API_KEY) {
-    throw new Error(
+    throw new MissingApiKeyError(
       [
         "N8N_E2E_API_KEY is required for real API E2E.",
         `Open local n8n at ${baseAppUrl}, create a test API key, then rerun:`,
@@ -93,6 +103,23 @@ async function assertApiKeyConfigured() {
       ].join("\n"),
     )
   }
+}
+
+class MissingApiKeyError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = "MissingApiKeyError"
+  }
+}
+
+function successfulDownArgs() {
+  const args = ["down", "--remove-orphans"]
+
+  if (removeVolumes) {
+    args.splice(1, 0, "--volumes")
+  }
+
+  return args
 }
 
 async function runVitest() {
@@ -235,7 +262,7 @@ function delay(ms) {
 }
 
 function redact(value) {
-  return value
+  return redactConfiguredSecretValues(value)
     .replace(
       /(["']?authorization["']?\s*:\s*)("Bearer\s+[^"]*"|'Bearer\s+[^']*'|Bearer\s+[^\s,}]+)/gi,
       (_match, prefix, rawValue) => {
@@ -253,4 +280,17 @@ function redact(value) {
       },
     )
     .replace(/Authorization:\s*Bearer\s+[^\s]+/gi, "Authorization: Bearer [REDACTED]")
+}
+
+function redactConfiguredSecretValues(value) {
+  return [env.N8N_E2E_API_KEY, env.N8N_E2E_MCP_TOKEN]
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length)
+    .reduce((output, secret) => {
+      return output.replace(new RegExp(escapeRegExp(secret), "g"), "[REDACTED]")
+    }, value)
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
