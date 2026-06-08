@@ -31,6 +31,18 @@ function deterministicNow(isoDate: string): () => Date {
   return () => new Date(isoDate)
 }
 
+function trackingBuildApi(currentContext: E2eContext): {
+  createWorkflow(workflow: N8nWorkflow): Promise<N8nWorkflow & { id: string }>
+} {
+  return {
+    createWorkflow: async (workflow) => {
+      const created = await currentContext.api.createWorkflow(workflow)
+      trackWorkflow(currentContext, created.id)
+      return created
+    },
+  }
+}
+
 function workflowWithoutApiFields(workflow: N8nWorkflow & { id: string }): N8nWorkflow {
   return {
     name: workflow.name,
@@ -38,7 +50,6 @@ function workflowWithoutApiFields(workflow: N8nWorkflow & { id: string }): N8nWo
     nodes: workflow.nodes,
     connections: workflow.connections,
     settings: workflow.settings,
-    tags: workflow.tags,
     meta: workflow.meta,
   }
 }
@@ -53,13 +64,12 @@ describe("managed workflow lifecycle E2E", () => {
         name: `${context.runId} manual set`,
       },
       config: context.config,
-      api: context.api,
+      api: trackingBuildApi(context),
       registry: context.registry,
       planner: deterministicPlanner(),
       mcp: context.mcp,
       now: deterministicNow("2026-06-08T00:00:00.000Z"),
     })
-    trackWorkflow(context, buildResult.workflowId)
 
     expect(buildResult.workflowId).toEqual(expect.any(String))
     expect(buildResult.nodeCount).toBe(2)
@@ -147,7 +157,6 @@ describe("managed workflow lifecycle E2E", () => {
       ],
       connections: {},
       settings: {},
-      tags: [{ name: "opencode-n8n-builder" }],
       meta: {
         managedBy: "opencode-n8n-builder",
         managedByVersion: "0.2.0-e2e",
@@ -191,13 +200,12 @@ describe("managed workflow lifecycle E2E", () => {
         name: `${context.runId} stale preview`,
       },
       config: context.config,
-      api: context.api,
+      api: trackingBuildApi(context),
       registry: context.registry,
       planner: deterministicPlanner(),
       mcp: context.mcp,
       now: deterministicNow("2026-06-08T00:00:00.000Z"),
     })
-    trackWorkflow(context, buildResult.workflowId)
 
     const previewResult = await updateWorkflow({
       args: { workflowId: buildResult.workflowId, mode: "preview", prompt: "Add IF" },
