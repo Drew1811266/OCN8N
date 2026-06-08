@@ -37,6 +37,7 @@ describe("plugin E2E smoke", () => {
         active: false,
         nodes: [
           {
+            id: "manual-trigger",
             name: "Manual Trigger",
             type: "n8n-nodes-base.manualTrigger",
             typeVersion: 1,
@@ -45,7 +46,7 @@ describe("plugin E2E smoke", () => {
           },
         ],
         connections: {},
-        settings: {},
+        settings: { executionOrder: "v1" },
         meta: {
           managedBy: "opencode-n8n-builder",
           managedByVersion: "0.2.0-e2e",
@@ -53,6 +54,8 @@ describe("plugin E2E smoke", () => {
         },
       })
       trackWorkflow(context, created.id)
+      const createdWorkflow = await context.api.getWorkflow(created.id)
+      expect(createdWorkflow.active).toBe(false)
 
       await context.registry.upsert({
         workflowId: created.id,
