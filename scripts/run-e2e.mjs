@@ -37,7 +37,7 @@ main().catch(async (error) => {
   console.error(redact(String(error?.stack || error?.message || error)))
 
   if (stackTouched && !keepAlive) {
-    await compose(["down", "--volumes", "--remove-orphans"], { allowFailure: true, printOutput: true })
+    await compose(failureDownArgs(), { allowFailure: true, printOutput: true })
   } else if (stackTouched) {
     console.error(`n8n E2E stack kept running at ${baseAppUrl}`)
   }
@@ -113,6 +113,16 @@ class MissingApiKeyError extends Error {
 }
 
 function successfulDownArgs() {
+  const args = ["down", "--remove-orphans"]
+
+  if (removeVolumes) {
+    args.splice(1, 0, "--volumes")
+  }
+
+  return args
+}
+
+function failureDownArgs() {
   const args = ["down", "--remove-orphans"]
 
   if (removeVolumes) {
