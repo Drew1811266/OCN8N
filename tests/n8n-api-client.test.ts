@@ -176,4 +176,62 @@ describe("N8nApiClient", () => {
       },
     })
   })
+
+  it("lists workflows from paginated n8n API responses", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [{ id: "wf_1", name: "One", active: false, nodes: [], connections: {}, settings: {} }],
+            nextCursor: "cursor_2",
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [{ id: "wf_2", name: "Two", active: false, nodes: [], connections: {}, settings: {} }],
+          }),
+          { status: 200 },
+        ),
+      )
+    const client = new N8nApiClient({
+      baseUrl: "https://demo/api/v1",
+      apiKey: "api_key",
+      fetch,
+    })
+
+    await expect(client.listWorkflows()).resolves.toEqual([
+      expect.objectContaining({ id: "wf_1", name: "One" }),
+      expect.objectContaining({ id: "wf_2", name: "Two" }),
+    ])
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      "https://demo/api/v1/workflows",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "https://demo/api/v1/workflows?cursor=cursor_2",
+      expect.objectContaining({ method: "GET" }),
+    )
+  })
+
+  it("deletes workflows by id", async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 204 }))
+    const client = new N8nApiClient({
+      baseUrl: "https://demo/api/v1",
+      apiKey: "api_key",
+      fetch,
+    })
+
+    await expect(client.deleteWorkflow("wf_1")).resolves.toBeUndefined()
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://demo/api/v1/workflows/wf_1",
+      expect.objectContaining({ method: "DELETE" }),
+    )
+  })
 })
