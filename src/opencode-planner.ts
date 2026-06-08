@@ -1,7 +1,9 @@
 import { N8nBuilderError } from "./errors.js"
 import {
-  workflowPatchPlanSchema,
-  workflowPlanSchema,
+  workflowDraftSchema,
+  workflowPatchDraftSchema,
+  type WorkflowDraft,
+  type WorkflowPatchDraft,
   type WorkflowPatchPlan,
   type WorkflowPlan,
 } from "./workflow-plan.js"
@@ -64,23 +66,37 @@ export class OpencodePlanner {
   }
 
   async createPlan(context: PlannerContext): Promise<WorkflowPlan> {
+    const draft = await this.createDraft(context)
+    return draft.plan
+  }
+
+  async createDraft(context: PlannerContext): Promise<WorkflowDraft> {
     const output = await this.promptStructured({
-      title: "n8n workflow planning",
+      title: "n8n workflow draft planning",
       text: this.buildCreatePrompt(context),
-      schema: workflowPlanJsonSchema,
+      schema: workflowDraftJsonSchema,
     })
 
-    return this.parsePlan(output)
+    return this.parseDraft(output)
   }
 
   async createPatchPlan(context: PatchPlannerContext): Promise<WorkflowPatchPlan> {
+    const draft = await this.createPatchDraft(context)
+    return {
+      summary: draft.summary,
+      changes: draft.changes,
+      replacementPlan: draft.replacementPlan,
+    }
+  }
+
+  async createPatchDraft(context: PatchPlannerContext): Promise<WorkflowPatchDraft> {
     const output = await this.promptStructured({
-      title: "n8n workflow update planning",
+      title: "n8n workflow update draft planning",
       text: this.buildPatchPrompt(context),
-      schema: workflowPatchPlanJsonSchema,
+      schema: workflowPatchDraftJsonSchema,
     })
 
-    return this.parsePatchPlan(output)
+    return this.parsePatchDraft(output)
   }
 
   private async promptStructured(input: { title: string; text: string; schema: JsonSchema }): Promise<unknown> {
@@ -122,22 +138,26 @@ export class OpencodePlanner {
     }
   }
 
-  private parsePlan(output: unknown): WorkflowPlan {
+  private parseDraft(output: unknown): WorkflowDraft {
     try {
-      return workflowPlanSchema.parse(output)
+      return workflowDraftSchema.parse(output)
     } catch (error) {
-      throw new N8nBuilderError("OpenCode structured planning returned an invalid WorkflowPlan.", "OPENCODE_PLANNER_ERROR", {
-        cause: serializeError(error),
-      })
+      throw new N8nBuilderError(
+        "OpenCode structured planning returned an invalid WorkflowDraft.",
+        "OPENCODE_PLANNER_ERROR",
+        {
+          cause: serializeError(error),
+        },
+      )
     }
   }
 
-  private parsePatchPlan(output: unknown): WorkflowPatchPlan {
+  private parsePatchDraft(output: unknown): WorkflowPatchDraft {
     try {
-      return workflowPatchPlanSchema.parse(output)
+      return workflowPatchDraftSchema.parse(output)
     } catch (error) {
       throw new N8nBuilderError(
-        "OpenCode structured planning returned an invalid WorkflowPatchPlan.",
+        "OpenCode structured planning returned an invalid WorkflowPatchDraft.",
         "OPENCODE_PLANNER_ERROR",
         {
           cause: serializeError(error),
@@ -469,7 +489,41 @@ const workflowPlanJsonSchema: JsonSchema = {
   additionalProperties: false,
 }
 
-const workflowPatchPlanJsonSchema: JsonSchema = {
+const nodeSelectionJsonSchema: JsonSchema = {
+  type: "object",
+  properties: {
+    nodeType: {
+      type: "string",
+      description: "Full n8n node type selected for the workflow.",
+    },
+    reason: {
+      type: "string",
+      description: "Why this node type is needed for the requested workflow.",
+    },
+  },
+  required: ["nodeType", "reason"],
+  additionalProperties: false,
+}
+
+const workflowDraftJsonSchema: JsonSchema = {
+  type: "object",
+  properties: {
+    plan: workflowPlanJsonSchema,
+    sdkCode: {
+      type: "string",
+      description: "TypeScript SDK code that builds or validates the planned workflow draft.",
+    },
+    nodeSelection: {
+      type: "array",
+      items: nodeSelectionJsonSchema,
+      description: "Selected node types and rationale.",
+    },
+  },
+  required: ["plan", "sdkCode"],
+  additionalProperties: false,
+}
+
+const workflowPatchDraftJsonSchema: JsonSchema = {
   type: "object",
   properties: {
     summary: {
@@ -482,7 +536,16 @@ const workflowPatchPlanJsonSchema: JsonSchema = {
       description: "Human-readable list of intended changes.",
     },
     replacementPlan: workflowPlanJsonSchema,
+    sdkCode: {
+      type: "string",
+      description: "TypeScript SDK code that builds or validates the replacement workflow draft.",
+    },
+    nodeSelection: {
+      type: "array",
+      items: nodeSelectionJsonSchema,
+      description: "Selected node types and rationale.",
+    },
   },
-  required: ["summary", "changes", "replacementPlan"],
+  required: ["summary", "changes", "replacementPlan", "sdkCode"],
   additionalProperties: false,
 }

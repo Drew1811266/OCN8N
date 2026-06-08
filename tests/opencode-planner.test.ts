@@ -55,14 +55,126 @@ describe("workflow draft schemas", () => {
 })
 
 describe("OpencodePlanner", () => {
-  it("creates a session, requests JSON workflow plan output, and parses the result", async () => {
+  it("creates workflow drafts with SDK validation code, node selection, and draft JSON schema", async () => {
+    const workflowDraft = {
+      plan: simpleWebhookPlan,
+      sdkCode: "await validateWorkflow(workflow)",
+      nodeSelection: [
+        {
+          nodeType: "n8n-nodes-base.webhook",
+          reason: "Receives incoming order events.",
+        },
+      ],
+    }
     const client = {
       session: {
         create: vi.fn(async () => ({ id: "session_1" })),
         prompt: vi.fn(async () => ({
           data: {
             info: {},
-            parts: [{ type: "text", text: JSON.stringify(simpleWebhookPlan) }],
+            parts: [{ type: "text", text: JSON.stringify(workflowDraft) }],
+          },
+        })),
+      },
+    }
+    const planner = new OpencodePlanner({ client })
+
+    const draft = await planner.createDraft({
+      prompt: "Build an order webhook",
+      sdkReference: "Use n8n workflow rules",
+      nodeDocumentation: [{ nodeType: "n8n-nodes-base.webhook", documentation: "Webhook docs" }],
+      suggestedNodes: "Use Webhook for inbound events.",
+    })
+
+    expect(draft).toEqual(workflowDraft)
+    expect(client.session.create).toHaveBeenCalledWith({ body: { title: "n8n workflow draft planning" } })
+
+    const promptInput = client.session.prompt.mock.calls[0]?.[0] as
+      | { body: { parts: Array<{ text: string }>; format?: unknown } }
+      | undefined
+    const promptText = promptInput?.body.parts[0]?.text ?? ""
+
+    expect(promptInput?.body).not.toHaveProperty("format")
+    expect(promptText).toContain('"plan"')
+    expect(promptText).toContain('"sdkCode"')
+    expect(promptText).toContain('"nodeSelection"')
+    expect(promptText).toContain('"required": [')
+    expect(promptText).toContain("Suggested node guidance:")
+    expect(promptText).toContain("Use Webhook for inbound events.")
+    expect(promptText).toContain("Explain why each selected node type is needed in nodeSelection.")
+  })
+
+  it("creates workflow patch drafts with SDK validation code, node selection, and patch draft JSON schema", async () => {
+    const workflowPatchDraft = {
+      summary: "Add Slack notification",
+      changes: ["Add Slack node"],
+      replacementPlan: simpleWebhookPlan,
+      sdkCode: "await validateWorkflow(workflow)",
+      nodeSelection: [
+        {
+          nodeType: "n8n-nodes-base.slack",
+          reason: "Sends order notifications to the fulfillment channel.",
+        },
+      ],
+    }
+    const client = {
+      session: {
+        create: vi.fn(async () => ({ id: "session_1" })),
+        prompt: vi.fn(async () => ({
+          data: {
+            info: {},
+            parts: [{ type: "text", text: JSON.stringify(workflowPatchDraft) }],
+          },
+        })),
+      },
+    }
+    const planner = new OpencodePlanner({ client })
+
+    const patchDraft = await planner.createPatchDraft({
+      prompt: "Notify Slack for each order",
+      sdkReference: "Use n8n workflow rules",
+      nodeDocumentation: [{ nodeType: "n8n-nodes-base.slack", documentation: "Slack docs" }],
+      suggestedNodes: "Use Slack for notifications.",
+      currentWorkflowJson: JSON.stringify({ name: "Order webhook" }),
+    })
+
+    expect(patchDraft).toEqual(workflowPatchDraft)
+    expect(client.session.create).toHaveBeenCalledWith({ body: { title: "n8n workflow update draft planning" } })
+
+    const promptInput = client.session.prompt.mock.calls[0]?.[0] as
+      | { body: { parts: Array<{ text: string }>; format?: unknown } }
+      | undefined
+    const promptText = promptInput?.body.parts[0]?.text ?? ""
+
+    expect(promptInput?.body).not.toHaveProperty("format")
+    expect(promptText).toContain('"summary"')
+    expect(promptText).toContain('"changes"')
+    expect(promptText).toContain('"replacementPlan"')
+    expect(promptText).toContain('"sdkCode"')
+    expect(promptText).toContain('"nodeSelection"')
+    expect(promptText).toContain("Suggested node guidance:")
+    expect(promptText).toContain("Use Slack for notifications.")
+    expect(promptText).toContain("Explain why each selected node type is needed in nodeSelection.")
+  })
+
+  it("creates a session, requests JSON workflow plan output, and parses the result", async () => {
+    const workflowDraft = {
+      plan: simpleWebhookPlan,
+      sdkCode: "await validateWorkflow(workflow)",
+      nodeSelection: [
+        {
+          nodeType: "n8n-nodes-base.webhook",
+          reason: "Receives incoming order events.",
+        },
+      ],
+    }
+    const client = {
+      session: {
+        create: vi.fn(async () => ({ id: "session_1" })),
+        prompt: vi.fn(async () => ({
+          data: {
+            info: {},
+            parts: [{ type: "text", text: JSON.stringify(workflowDraft) }],
           },
         })),
       },
@@ -77,7 +189,7 @@ describe("OpencodePlanner", () => {
     })
 
     expect(plan).toEqual(simpleWebhookPlan)
-    expect(client.session.create).toHaveBeenCalledWith({ body: { title: "n8n workflow planning" } })
+    expect(client.session.create).toHaveBeenCalledWith({ body: { title: "n8n workflow draft planning" } })
     expect(client.session.prompt).toHaveBeenCalledWith({
       path: { id: "session_1" },
       body: {
@@ -101,13 +213,17 @@ describe("OpencodePlanner", () => {
   })
 
   it("parses JSON from fenced assistant text", async () => {
+    const workflowDraft = {
+      plan: simpleWebhookPlan,
+      sdkCode: "await validateWorkflow(workflow)",
+    }
     const client = {
       session: {
         create: vi.fn(async () => ({ id: "session_1" })),
         prompt: vi.fn(async () => ({
           data: {
             info: {},
-            parts: [{ type: "text", text: `\`\`\`json\n${JSON.stringify(simpleWebhookPlan)}\n\`\`\`` }],
+            parts: [{ type: "text", text: `\`\`\`json\n${JSON.stringify(workflowDraft)}\n\`\`\`` }],
           },
         })),
       },
@@ -148,10 +264,11 @@ describe("OpencodePlanner", () => {
   })
 
   it("creates patch plans with current workflow context and validates JSON output", async () => {
-    const patchPlan = {
+    const patchDraft = {
       summary: "Add Slack notification",
       changes: ["Add Slack node"],
       replacementPlan: simpleWebhookPlan,
+      sdkCode: "await validateWorkflow(workflow)",
     }
     const client = {
       session: {
@@ -159,7 +276,7 @@ describe("OpencodePlanner", () => {
         prompt: vi.fn(async () => ({
           data: {
             info: {},
-            parts: [{ type: "text", text: JSON.stringify(patchPlan) }],
+            parts: [{ type: "text", text: JSON.stringify(patchDraft) }],
           },
         })),
       },
@@ -199,10 +316,11 @@ describe("OpencodePlanner", () => {
   })
 
   it("redacts secret-looking values from current workflow JSON in patch prompts", async () => {
-    const patchPlan = {
+    const patchDraft = {
       summary: "Add Slack notification",
       changes: ["Add Slack node"],
       replacementPlan: simpleWebhookPlan,
+      sdkCode: "await validateWorkflow(workflow)",
     }
     const client = {
       session: {
@@ -210,7 +328,7 @@ describe("OpencodePlanner", () => {
         prompt: vi.fn(async (_input: unknown) => ({
           data: {
             info: {},
-            parts: [{ type: "text", text: JSON.stringify(patchPlan) }],
+            parts: [{ type: "text", text: JSON.stringify(patchDraft) }],
           },
         })),
       },
@@ -249,10 +367,11 @@ describe("OpencodePlanner", () => {
   })
 
   it("redacts authorization bearer values stored under generic header name/value pairs", async () => {
-    const patchPlan = {
+    const patchDraft = {
       summary: "Add Slack notification",
       changes: ["Add Slack node"],
       replacementPlan: simpleWebhookPlan,
+      sdkCode: "await validateWorkflow(workflow)",
     }
     const client = {
       session: {
@@ -260,7 +379,7 @@ describe("OpencodePlanner", () => {
         prompt: vi.fn(async (_input: unknown) => ({
           data: {
             info: {},
-            parts: [{ type: "text", text: JSON.stringify(patchPlan) }],
+            parts: [{ type: "text", text: JSON.stringify(patchDraft) }],
           },
         })),
       },
@@ -293,10 +412,11 @@ describe("OpencodePlanner", () => {
   })
 
   it("redacts API key header values paired with generic headerName/headerValue fields", async () => {
-    const patchPlan = {
+    const patchDraft = {
       summary: "Add Slack notification",
       changes: ["Add Slack node"],
       replacementPlan: simpleWebhookPlan,
+      sdkCode: "await validateWorkflow(workflow)",
     }
     const client = {
       session: {
@@ -304,7 +424,7 @@ describe("OpencodePlanner", () => {
         prompt: vi.fn(async (_input: unknown) => ({
           data: {
             info: {},
-            parts: [{ type: "text", text: JSON.stringify(patchPlan) }],
+            parts: [{ type: "text", text: JSON.stringify(patchDraft) }],
           },
         })),
       },
@@ -367,7 +487,7 @@ describe("OpencodePlanner", () => {
     expect((error as N8nBuilderError).message).toBe("planning failed")
   })
 
-  it("throws a typed error when structured workflow plan output is invalid", async () => {
+  it("throws a typed error when structured workflow draft output is invalid", async () => {
     const client = {
       session: {
         create: vi.fn(async () => ({ id: "session_1" })),
@@ -394,6 +514,39 @@ describe("OpencodePlanner", () => {
 
     expect(error).toBeInstanceOf(N8nBuilderError)
     expect((error as N8nBuilderError).code).toBe("OPENCODE_PLANNER_ERROR")
-    expect((error as N8nBuilderError).message).toBe("OpenCode structured planning returned an invalid WorkflowPlan.")
+    expect((error as N8nBuilderError).message).toBe("OpenCode structured planning returned an invalid WorkflowDraft.")
+  })
+
+  it("throws a typed error when structured workflow patch draft output is invalid", async () => {
+    const client = {
+      session: {
+        create: vi.fn(async () => ({ id: "session_1" })),
+        prompt: vi.fn(async () => ({
+          data: {
+            info: {},
+            parts: [{ type: "text", text: JSON.stringify({ summary: "bad" }) }],
+          },
+        })),
+      },
+    }
+    const planner = new OpencodePlanner({ client })
+
+    let error: unknown
+    try {
+      await planner.createPatchDraft({
+        prompt: "Notify Slack for each order",
+        sdkReference: "Use n8n workflow rules",
+        nodeDocumentation: [],
+        currentWorkflowJson: JSON.stringify({ name: "Order webhook" }),
+      })
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toBeInstanceOf(N8nBuilderError)
+    expect((error as N8nBuilderError).code).toBe("OPENCODE_PLANNER_ERROR")
+    expect((error as N8nBuilderError).message).toBe(
+      "OpenCode structured planning returned an invalid WorkflowPatchDraft.",
+    )
   })
 })
