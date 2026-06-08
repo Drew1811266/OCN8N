@@ -290,6 +290,126 @@ describe("N8nMcpClient", () => {
     })
   })
 
+  it("parses validate_workflow fenced JSON text content", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: {
+            content: [
+              {
+                type: "text",
+                text: '```json\n{"valid":true,"warnings":[],"errors":[]}\n```',
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.validateWorkflowCode("export default workflow")).resolves.toEqual({
+      valid: true,
+      warnings: [],
+      errors: [],
+    })
+  })
+
+  it("parses the first validate_workflow JSON object from explanatory text", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: {
+            content: [
+              {
+                type: "text",
+                text: 'Validation summary:\n{"valid":false,"errors":["Missing trigger"],"warnings":[]}\nReview above.',
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.validateWorkflowCode("export default workflow")).resolves.toEqual({
+      valid: false,
+      warnings: [],
+      errors: ["Missing trigger"],
+    })
+  })
+
+  it("defaults missing validate_workflow warnings and errors to empty arrays", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: {
+            content: [{ type: "text", text: '{"valid":true}' }],
+          },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.validateWorkflowCode("export default workflow")).resolves.toEqual({
+      valid: true,
+      warnings: [],
+      errors: [],
+    })
+  })
+
+  it("throws a typed error when validate_workflow text is not parseable JSON", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: {
+            content: [{ type: "text", text: "Validation failed without structured output." }],
+          },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.validateWorkflowCode("export default workflow")).rejects.toMatchObject({
+      code: "N8N_MCP_TOOL_ERROR",
+      message: "n8n MCP validate_workflow returned invalid JSON.",
+      details: { toolName: "validate_workflow", reason: "invalid_json" },
+    })
+  })
+
+  it("throws a typed error when validate_workflow JSON is missing valid boolean", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: {
+            content: [{ type: "text", text: '{"warnings":[],"errors":[]}' }],
+          },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.validateWorkflowCode("export default workflow")).rejects.toMatchObject({
+      code: "N8N_MCP_TOOL_ERROR",
+      message: "n8n MCP validate_workflow returned an invalid validation result.",
+      details: { toolName: "validate_workflow", reason: "invalid_valid" },
+    })
+  })
+
   it("throws a typed tool error for JSON-RPC errors", async () => {
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
       return new Response(

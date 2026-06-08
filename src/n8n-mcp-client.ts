@@ -254,7 +254,7 @@ function parseMcpResponse(value: unknown): McpResponse {
 function parseWorkflowValidationResult(text: string): McpWorkflowValidationResult {
   let parsed: unknown
   try {
-    parsed = JSON.parse(text)
+    parsed = JSON.parse(extractWorkflowValidationJson(text))
   } catch {
     throw new N8nBuilderError("n8n MCP validate_workflow returned invalid JSON.", "N8N_MCP_TOOL_ERROR", {
       toolName: "validate_workflow",
@@ -281,6 +281,63 @@ function parseWorkflowValidationResult(text: string): McpWorkflowValidationResul
   }
 
   return result
+}
+
+function extractWorkflowValidationJson(text: string): string {
+  const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const searchText = fencedMatch?.[1] ?? text
+  const jsonText = findFirstJsonObject(searchText)
+
+  if (!jsonText) {
+    throw new Error("No JSON object found.")
+  }
+
+  return jsonText
+}
+
+function findFirstJsonObject(text: string): string | undefined {
+  for (let start = text.indexOf("{"); start !== -1; start = text.indexOf("{", start + 1)) {
+    const candidate = readBalancedJsonObject(text, start)
+    if (!candidate) continue
+
+    return candidate
+  }
+
+  return undefined
+}
+
+function readBalancedJsonObject(text: string, start: number): string | undefined {
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index]
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (char === "\\") {
+        escaped = true
+      } else if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inString = true
+    } else if (char === "{") {
+      depth += 1
+    } else if (char === "}") {
+      depth -= 1
+      if (depth === 0) {
+        return text.slice(start, index + 1)
+      }
+    }
+  }
+
+  return undefined
 }
 
 function parseWorkflowValidationWarnings(value: unknown): McpWorkflowValidationWarning[] {
