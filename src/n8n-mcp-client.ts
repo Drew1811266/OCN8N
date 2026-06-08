@@ -37,6 +37,20 @@ export type NodeTypeLookup =
       mode?: string
     }
 
+export type McpWorkflowValidationWarning = {
+  code: string
+  message: string
+  nodeName?: string
+  parameterPath?: string
+}
+
+export type McpWorkflowValidationResult = {
+  valid: boolean
+  nodeCount?: number
+  warnings: McpWorkflowValidationWarning[]
+  errors: string[]
+}
+
 export class N8nMcpClient {
   private requestId = 0
   private readonly mcpUrl: string
@@ -59,6 +73,16 @@ export class N8nMcpClient {
 
   async getNodeTypes(nodeTypes: NodeTypeLookup[]): Promise<string> {
     return this.callTextTool("get_node_types", { nodeIds: nodeTypes })
+  }
+
+  async getSuggestedNodes(categories: string[]): Promise<string> {
+    return this.callTextTool("get_suggested_nodes", { categories })
+  }
+
+  async validateWorkflowCode(code: string): Promise<McpWorkflowValidationResult> {
+    const text = await this.callTextTool("validate_workflow", { code })
+
+    return parseWorkflowValidationResult(text)
   }
 
   private async callTextTool(name: string, argumentsValue: Record<string, unknown>): Promise<string> {
@@ -225,6 +249,84 @@ function parseMcpResponse(value: unknown): McpResponse {
     id,
     result: value.result,
   }
+}
+
+function parseWorkflowValidationResult(text: string): McpWorkflowValidationResult {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new N8nBuilderError("n8n MCP validate_workflow returned invalid JSON.", "N8N_MCP_TOOL_ERROR", {
+      toolName: "validate_workflow",
+      reason: "invalid_json",
+    })
+  }
+
+  if (!isRecord(parsed)) {
+    throwWorkflowValidationParseError("result_not_object")
+  }
+
+  if (typeof parsed.valid !== "boolean") {
+    throwWorkflowValidationParseError("invalid_valid")
+  }
+
+  const result: McpWorkflowValidationResult = {
+    valid: parsed.valid,
+    warnings: parseWorkflowValidationWarnings(parsed.warnings),
+    errors: parseWorkflowValidationErrors(parsed.errors),
+  }
+
+  if (typeof parsed.nodeCount === "number" && Number.isFinite(parsed.nodeCount)) {
+    result.nodeCount = parsed.nodeCount
+  }
+
+  return result
+}
+
+function parseWorkflowValidationWarnings(value: unknown): McpWorkflowValidationWarning[] {
+  if (value === undefined) return []
+
+  if (!Array.isArray(value)) {
+    throwWorkflowValidationParseError("invalid_warnings")
+  }
+
+  return value.map((warning) => {
+    if (!isRecord(warning) || typeof warning.code !== "string" || typeof warning.message !== "string") {
+      throwWorkflowValidationParseError("invalid_warning")
+    }
+
+    const parsedWarning: McpWorkflowValidationWarning = {
+      code: warning.code,
+      message: warning.message,
+    }
+
+    if (typeof warning.nodeName === "string") {
+      parsedWarning.nodeName = warning.nodeName
+    }
+
+    if (typeof warning.parameterPath === "string") {
+      parsedWarning.parameterPath = warning.parameterPath
+    }
+
+    return parsedWarning
+  })
+}
+
+function parseWorkflowValidationErrors(value: unknown): string[] {
+  if (value === undefined) return []
+
+  if (!Array.isArray(value) || !value.every((error): error is string => typeof error === "string")) {
+    throwWorkflowValidationParseError("invalid_errors")
+  }
+
+  return value
+}
+
+function throwWorkflowValidationParseError(reason: string): never {
+  throw new N8nBuilderError("n8n MCP validate_workflow returned an invalid validation result.", "N8N_MCP_TOOL_ERROR", {
+    toolName: "validate_workflow",
+    reason,
+  })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

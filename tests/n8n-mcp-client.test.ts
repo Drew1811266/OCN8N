@@ -202,6 +202,94 @@ describe("N8nMcpClient", () => {
     })
   })
 
+  it("calls get_suggested_nodes with categories array", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: { content: [{ type: "text", text: "Schedule Trigger\nHTTP Request" }] },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.getSuggestedNodes(["scheduling", "data_extraction"])).resolves.toBe(
+      "Schedule Trigger\nHTTP Request",
+    )
+
+    const requestInit = fetch.mock.calls[0]?.[1] as RequestInit | undefined
+    expect(JSON.parse(requestInit?.body as string)).toEqual({
+      jsonrpc: "2.0",
+      id: "1",
+      method: "tools/call",
+      params: {
+        name: "get_suggested_nodes",
+        arguments: { categories: ["scheduling", "data_extraction"] },
+      },
+    })
+  })
+
+  it("calls validate_workflow with code and parses structured JSON", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  valid: false,
+                  nodeCount: 2,
+                  warnings: [
+                    {
+                      code: "missing_position",
+                      message: "Node is missing a position.",
+                      nodeName: "Webhook",
+                      parameterPath: "position",
+                      ignored: true,
+                    },
+                  ],
+                  errors: ["Missing credentials"],
+                }),
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await expect(client.validateWorkflowCode("export default workflow")).resolves.toEqual({
+      valid: false,
+      nodeCount: 2,
+      warnings: [
+        {
+          code: "missing_position",
+          message: "Node is missing a position.",
+          nodeName: "Webhook",
+          parameterPath: "position",
+        },
+      ],
+      errors: ["Missing credentials"],
+    })
+
+    const requestInit = fetch.mock.calls[0]?.[1] as RequestInit | undefined
+    expect(JSON.parse(requestInit?.body as string)).toEqual({
+      jsonrpc: "2.0",
+      id: "1",
+      method: "tools/call",
+      params: {
+        name: "validate_workflow",
+        arguments: { code: "export default workflow" },
+      },
+    })
+  })
+
   it("throws a typed tool error for JSON-RPC errors", async () => {
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
       return new Response(
