@@ -89,9 +89,10 @@ describe("OpencodePlanner", () => {
     expect(draft).toEqual(workflowDraft)
     expect(client.session.create).toHaveBeenCalledWith({ body: { title: "n8n workflow draft planning" } })
 
-    const promptInput = client.session.prompt.mock.calls[0]?.[0] as
-      | { body: { parts: Array<{ text: string }>; format?: unknown } }
-      | undefined
+    const promptCalls = client.session.prompt.mock.calls as unknown as Array<[
+      { body: { parts: Array<{ text: string }>; format?: unknown } },
+    ]>
+    const promptInput = promptCalls[0]?.[0]
     const promptText = promptInput?.body.parts[0]?.text ?? ""
 
     expect(promptInput?.body).not.toHaveProperty("format")
@@ -141,9 +142,10 @@ describe("OpencodePlanner", () => {
     expect(patchDraft).toEqual(workflowPatchDraft)
     expect(client.session.create).toHaveBeenCalledWith({ body: { title: "n8n workflow update draft planning" } })
 
-    const promptInput = client.session.prompt.mock.calls[0]?.[0] as
-      | { body: { parts: Array<{ text: string }>; format?: unknown } }
-      | undefined
+    const promptCalls = client.session.prompt.mock.calls as unknown as Array<[
+      { body: { parts: Array<{ text: string }>; format?: unknown } },
+    ]>
+    const promptInput = promptCalls[0]?.[0]
     const promptText = promptInput?.body.parts[0]?.text ?? ""
 
     expect(promptInput?.body).not.toHaveProperty("format")
