@@ -73,7 +73,12 @@ function createCleanupDiagnosticError(error: unknown, context: E2eContext): Erro
 function sanitizeDiagnostic(value: string, context: E2eContext | undefined): string {
   let sanitized = redactSecrets(value)
 
-  for (const secret of [context?.config.apiKey, context?.config.mcpToken]) {
+  for (const secret of [
+    context?.config.apiKey,
+    context?.config.mcpToken,
+    process.env.N8N_E2E_API_KEY,
+    process.env.N8N_E2E_MCP_TOKEN,
+  ]) {
     if (secret) {
       sanitized = sanitized.split(secret).join("[REDACTED]")
     }
