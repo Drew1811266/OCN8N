@@ -54,6 +54,39 @@ describe("loadPluginConfig", () => {
     expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
   })
 
+  it("loads API config while ignoring malformed MCP token config", () => {
+    const config = loadApiPluginConfig({
+      env: {
+        N8N_BASE_URL: "https://demo.app.n8n.cloud/api/v1",
+        N8N_API_KEY: "n8n_api_key",
+      },
+      opencodeConfig: {
+        n8n: {
+          mcpToken: 123,
+        },
+      },
+      workspaceDir: "/tmp/project",
+    })
+
+    expect(config.baseUrl).toBe("https://demo.app.n8n.cloud/api/v1")
+    expect(config.apiKey).toBe("n8n_api_key")
+  })
+
+  it("loads local config while ignoring malformed MCP token config", () => {
+    const config = loadLocalPluginConfig({
+      env: {},
+      opencodeConfig: {
+        n8n: {
+          mcpToken: 123,
+        },
+      },
+      workspaceDir: "/tmp/project",
+    })
+
+    expect(config.workspaceDir).toBe("/tmp/project")
+    expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
+  })
+
   it("throws a typed API config error when API settings are missing", () => {
     try {
       loadApiPluginConfig({

@@ -14,7 +14,6 @@ type OpencodeN8nConfig = {
     baseUrl?: string
     apiKey?: string
     mcpUrl?: string
-    mcpToken?: string
     credentialEnv?: Record<string, CredentialEnvMapping>
     projectId?: string
     folderId?: string
@@ -123,7 +122,6 @@ function asOpencodeN8nConfig(value: unknown): OpencodeN8nConfig {
       baseUrl: readOptionalString(n8n, "baseUrl"),
       apiKey: readOptionalString(n8n, "apiKey"),
       mcpUrl: readOptionalString(n8n, "mcpUrl"),
-      mcpToken: readOptionalString(n8n, "mcpToken"),
       credentialEnv: readCredentialEnv(n8n.credentialEnv),
       projectId: readOptionalString(n8n, "projectId"),
       folderId: readOptionalString(n8n, "folderId"),
@@ -138,7 +136,7 @@ export function loadPluginConfig(input: LoadPluginConfigInput): PluginConfig {
   const baseUrl = n8n.baseUrl ?? input.env.N8N_BASE_URL
   const apiKey = n8n.apiKey ?? input.env.N8N_API_KEY
   const mcpUrl = n8n.mcpUrl ?? input.env.N8N_MCP_URL
-  const mcpToken = n8n.mcpToken ?? input.env.N8N_MCP_TOKEN
+  const mcpToken = readOpencodeMcpToken(input.opencodeConfig) ?? input.env.N8N_MCP_TOKEN
 
   requireConfigValues([
     ["N8N_BASE_URL", baseUrl],
@@ -153,6 +151,17 @@ export function loadPluginConfig(input: LoadPluginConfigInput): PluginConfig {
     mcpUrl: mcpUrl as string,
     ...(mcpToken ? { mcpToken } : {}),
   }
+}
+
+function readOpencodeMcpToken(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const n8n = (value as Record<string, unknown>).n8n
+  if (n8n === undefined) return undefined
+  if (!isPlainObject(n8n)) {
+    throwInvalidConfig("n8n", "must be a plain object")
+  }
+
+  return readOptionalString(n8n, "mcpToken")
 }
 
 export function loadApiPluginConfig(input: LoadPluginConfigInput): ApiPluginConfig {
