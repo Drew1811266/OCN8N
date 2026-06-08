@@ -77,13 +77,21 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
       })
+      const mcpClient = new N8nMcpClient({ mcpUrl: config.mcpUrl, authToken: config.mcpToken })
 
       return {
         config,
         api,
         registry: new WorkflowRegistry(config.registryPath),
         previewStore: new PreviewStore(config.previewDir),
-        mcp: new N8nMcpClient({ mcpUrl: config.mcpUrl, authToken: config.mcpToken }),
+        mcp: {
+          getSdkReference: (section: string) => mcpClient.getSdkReference(section),
+          searchNodes: (query: string) => mcpClient.searchNodes(query),
+          getNodeTypes: (nodeTypes: Parameters<N8nMcpClient["getNodeTypes"]>[0]) =>
+            mcpClient.getNodeTypes(nodeTypes),
+          getSuggestedNodes: (categories: string[]) => mcpClient.getSuggestedNodes(categories),
+          validateWorkflowCode: (code: string) => mcpClient.validateWorkflowCode(code),
+        },
         planner: new OpencodePlanner({ client }),
         credentialResolver: new CredentialResolver({
           api,

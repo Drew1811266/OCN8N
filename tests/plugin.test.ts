@@ -333,7 +333,25 @@ describe("plugin exports", () => {
         prompt: vi.fn(async () => ({
           data: {
             info: {},
-            parts: [{ type: "text", text: JSON.stringify(plan) }],
+            parts: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  plan,
+                  sdkCode: "const workflow = { nodes: [] }",
+                  nodeSelection: [
+                    {
+                      nodeType: "n8n-nodes-base.manualTrigger",
+                      reason: "Starts the workflow manually.",
+                    },
+                    {
+                      nodeType: "n8n-nodes-base.set",
+                      reason: "Creates the requested output field.",
+                    },
+                  ],
+                }),
+              },
+            ],
           },
         })),
       }
@@ -341,7 +359,25 @@ describe("plugin exports", () => {
       const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
         if (input === "https://demo/mcp") {
           const request = JSON.parse(init?.body as string) as { id: string; params?: { name?: string } }
-          const text = request.params?.name === "get_sdk_reference" ? "SDK docs" : "No node ids."
+          const textByToolName: Record<string, string> = {
+            get_sdk_reference: "SDK docs",
+            search_nodes: "Manual Trigger nodeType=n8n-nodes-base.manualTrigger\nSet nodeType=n8n-nodes-base.set",
+            get_node_types: "Manual Trigger and Set node docs",
+            get_suggested_nodes: "Use Manual Trigger with Set for manual data transformation workflows.",
+            validate_workflow: JSON.stringify({
+              valid: true,
+              nodeCount: 2,
+              warnings: [
+                {
+                  code: "MISSING_DESCRIPTION",
+                  message: "Add description",
+                  nodeName: "Manual Trigger",
+                },
+              ],
+              errors: [],
+            }),
+          }
+          const text = textByToolName[request.params?.name ?? ""] ?? "No node ids."
 
           return new Response(
             JSON.stringify({
@@ -388,8 +424,19 @@ describe("plugin exports", () => {
         )
 
         const output = parseToolOutput(
-          await result.tool?.n8n_build_workflow.execute({ prompt: "Build a manual workflow" }, {} as never),
+          await result.tool?.n8n_build_workflow.execute(
+            { prompt: "Build a manual workflow to set a field" },
+            {} as never,
+          ),
         )
+        const mcpToolNames = fetchMock.mock.calls
+          .filter(([input]) => input === "https://demo/mcp")
+          .map(([, init]) => {
+            const request = JSON.parse((init as RequestInit | undefined)?.body as string) as {
+              params?: { name?: string }
+            }
+            return request.params?.name
+          })
 
         expect(fetchMock).toHaveBeenCalledWith(
           "https://demo/mcp",
@@ -399,11 +446,20 @@ describe("plugin exports", () => {
             }),
           }),
         )
+        expect(mcpToolNames).toContain("get_suggested_nodes")
+        expect(mcpToolNames).toContain("validate_workflow")
         expect(output).toEqual(
           expect.objectContaining({
             workflowId: "wf_1",
             name: "Manual E2E",
           }),
+        )
+        expect((output as { warnings?: Array<{ code?: string }> }).warnings).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              code: "MCP_MISSING_DESCRIPTION",
+            }),
+          ]),
         )
       } finally {
         globalThis.fetch = originalFetch
