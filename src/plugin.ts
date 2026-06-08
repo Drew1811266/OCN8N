@@ -83,7 +83,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
         api,
         registry: new WorkflowRegistry(config.registryPath),
         previewStore: new PreviewStore(config.previewDir),
-        mcp: new N8nMcpClient({ mcpUrl: config.mcpUrl }),
+        mcp: new N8nMcpClient({ mcpUrl: config.mcpUrl, authToken: config.mcpToken }),
         planner: new OpencodePlanner({ client }),
         credentialResolver: new CredentialResolver({
           api,

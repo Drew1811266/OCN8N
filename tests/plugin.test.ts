@@ -9,18 +9,25 @@ function mockPluginInput(input: {
   directory?: string
   log?: ReturnType<typeof vi.fn>
   opencodeConfig?: unknown
+  session?: unknown
 } = {}): PluginInput {
+  const client: Record<string, unknown> = {
+    app: {
+      log: input.log ?? vi.fn().mockResolvedValue(undefined),
+    },
+    config: {
+      get: vi.fn().mockResolvedValue(input.opencodeConfig ?? { n8n: {} }),
+    },
+  }
+
+  if (input.session) {
+    client.session = input.session
+  }
+
   return {
     directory: input.directory ?? "/tmp/project",
     worktree: input.directory ?? "/tmp/project",
-    client: {
-      app: {
-        log: input.log ?? vi.fn().mockResolvedValue(undefined),
-      },
-      config: {
-        get: vi.fn().mockResolvedValue(input.opencodeConfig ?? { n8n: {} }),
-      },
-    },
+    client,
   } as unknown as PluginInput
 }
 
@@ -29,11 +36,13 @@ async function withoutN8nEnv<T>(fn: () => Promise<T>): Promise<T> {
     N8N_BASE_URL: process.env.N8N_BASE_URL,
     N8N_API_KEY: process.env.N8N_API_KEY,
     N8N_MCP_URL: process.env.N8N_MCP_URL,
+    N8N_MCP_TOKEN: process.env.N8N_MCP_TOKEN,
   }
 
   delete process.env.N8N_BASE_URL
   delete process.env.N8N_API_KEY
   delete process.env.N8N_MCP_URL
+  delete process.env.N8N_MCP_TOKEN
 
   try {
     return await fn()
@@ -41,10 +50,14 @@ async function withoutN8nEnv<T>(fn: () => Promise<T>): Promise<T> {
     restoreEnv("N8N_BASE_URL", original.N8N_BASE_URL)
     restoreEnv("N8N_API_KEY", original.N8N_API_KEY)
     restoreEnv("N8N_MCP_URL", original.N8N_MCP_URL)
+    restoreEnv("N8N_MCP_TOKEN", original.N8N_MCP_TOKEN)
   }
 }
 
-function restoreEnv(name: "N8N_BASE_URL" | "N8N_API_KEY" | "N8N_MCP_URL", value: string | undefined): void {
+function restoreEnv(
+  name: "N8N_BASE_URL" | "N8N_API_KEY" | "N8N_MCP_URL" | "N8N_MCP_TOKEN",
+  value: string | undefined,
+): void {
   if (value === undefined) {
     delete process.env[name]
   } else {
@@ -272,6 +285,126 @@ describe("plugin exports", () => {
             ],
           },
         })
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    })
+  })
+
+  it("passes configured MCP token to build workflow MCP requests", async () => {
+    await withoutN8nEnv(async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
+      const plan = {
+        name: "Manual E2E",
+        summary: "Create a manual trigger with Set output.",
+        nodes: [
+          {
+            key: "manual",
+            name: "Manual Trigger",
+            type: "n8n-nodes-base.manualTrigger",
+            typeVersion: 1,
+            position: [0, 0],
+            parameters: {},
+          },
+          {
+            key: "set",
+            name: "Set Fields",
+            type: "n8n-nodes-base.set",
+            typeVersion: 3,
+            position: [260, 0],
+            parameters: {
+              assignments: {
+                assignments: [
+                  {
+                    id: "message",
+                    name: "message",
+                    type: "string",
+                    value: "created by opencode",
+                  },
+                ],
+              },
+            },
+          },
+        ],
+        connections: [{ from: "manual", to: "set" }],
+      }
+      const session = {
+        create: vi.fn(async () => ({ id: "session_1" })),
+        prompt: vi.fn(async () => ({
+          data: {
+            info: {},
+            parts: [{ type: "text", text: JSON.stringify(plan) }],
+          },
+        })),
+      }
+      const originalFetch = globalThis.fetch
+      const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+        if (input === "https://demo/mcp") {
+          const request = JSON.parse(init?.body as string) as { id: string; params?: { name?: string } }
+          const text = request.params?.name === "get_sdk_reference" ? "SDK docs" : "No node ids."
+
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: request.id,
+              result: { content: [{ type: "text", text }] },
+            }),
+            { status: 200 },
+          )
+        }
+
+        return new Response(
+          JSON.stringify({
+            id: "wf_1",
+            name: "Manual E2E",
+            active: false,
+            nodes: [],
+            connections: {},
+            settings: {},
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        )
+      })
+      globalThis.fetch = fetchMock as typeof fetch
+
+      try {
+        const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
+        const result = await plugin(
+          mockPluginInput({
+            directory,
+            session,
+            opencodeConfig: {
+              n8n: {
+                baseUrl: "https://demo/api/v1",
+                apiKey: "key",
+                mcpUrl: "https://demo/mcp",
+                mcpToken: "mcp_token",
+              },
+            },
+          }),
+        )
+
+        const output = parseToolOutput(
+          await result.tool?.n8n_build_workflow.execute({ prompt: "Build a manual workflow" }, {} as never),
+        )
+
+        expect(fetchMock).toHaveBeenCalledWith(
+          "https://demo/mcp",
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: "Bearer mcp_token",
+            }),
+          }),
+        )
+        expect(output).toEqual(
+          expect.objectContaining({
+            workflowId: "wf_1",
+            name: "Manual E2E",
+          }),
+        )
       } finally {
         globalThis.fetch = originalFetch
       }

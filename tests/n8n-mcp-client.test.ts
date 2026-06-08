@@ -47,6 +47,54 @@ describe("N8nMcpClient", () => {
     })
   })
 
+  it("sends a Bearer token when MCP auth token is configured", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: { content: [{ type: "text", text: "SDK docs" }] },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({
+      mcpUrl: "https://demo/mcp",
+      authToken: "mcp_secret_token",
+      fetch,
+    })
+
+    await expect(client.getSdkReference("all")).resolves.toBe("SDK docs")
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://demo/mcp",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer mcp_secret_token",
+        }),
+      }),
+    )
+  })
+
+  it("omits Authorization when MCP auth token is not configured", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          result: { content: [{ type: "text", text: "SDK docs" }] },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })
+
+    await client.getSdkReference("all")
+
+    const requestInit = fetch.mock.calls[0]?.[1] as RequestInit | undefined
+    expect(requestInit?.headers).not.toHaveProperty("Authorization")
+  })
+
   it("throws a typed HTTP error when MCP rejects the request", async () => {
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => new Response("Unauthorized", { status: 401 }))
     const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", fetch })

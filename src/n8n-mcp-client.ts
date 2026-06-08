@@ -23,6 +23,7 @@ type McpResponse = {
 
 export type N8nMcpClientOptions = {
   mcpUrl: string
+  authToken?: string
   fetch?: FetchLike
 }
 
@@ -39,10 +40,12 @@ export type NodeTypeLookup =
 export class N8nMcpClient {
   private requestId = 0
   private readonly mcpUrl: string
+  private readonly authToken: string | undefined
   private readonly fetchImpl: FetchLike
 
   constructor(options: N8nMcpClientOptions) {
     this.mcpUrl = options.mcpUrl
+    this.authToken = options.authToken
     this.fetchImpl = options.fetch ?? fetch
   }
 
@@ -85,10 +88,7 @@ export class N8nMcpClient {
     const expectedId = String(++this.requestId)
     const response = await this.fetchImpl(this.mcpUrl, {
       method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-      },
+      headers: requestHeaders(this.authToken),
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: expectedId,
@@ -138,6 +138,14 @@ export class N8nMcpClient {
     }
 
     return mcpResponse
+  }
+}
+
+function requestHeaders(authToken: string | undefined): Record<string, string> {
+  return {
+    accept: "application/json",
+    "content-type": "application/json",
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
   }
 }
 
