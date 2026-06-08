@@ -326,6 +326,56 @@ describe("updateWorkflow", () => {
     expect(result.missingCredentials).toEqual([])
   })
 
+  it("passes MCP suggested-node guidance into preview planning when prompt matches categories", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => currentWorkflow),
+      updateWorkflow: vi.fn(),
+    }
+    const planner = {
+      createPatchPlan: vi.fn(async () => ({
+        summary: "Add Slack notification",
+        changes: ["Add Slack node"],
+        replacementPlan: simpleWebhookPlan,
+      })),
+    }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "Slack node: n8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "Slack schema"),
+      getSuggestedNodes: vi.fn(async () => "Use Schedule Trigger for recurring execution."),
+    }
+    const previewStore = {
+      save: vi.fn(async (preview) => ({
+        previewId: "preview_1",
+        ...preview,
+      })),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await updateWorkflow({
+      args: { workflowId: "wf_1", mode: "preview", prompt: "每天 fetch API then 通知 Slack" },
+      config,
+      api,
+      planner,
+      mcp,
+      previewStore,
+      registry,
+      now: () => now,
+    })
+
+    expect(mcp.getSuggestedNodes).toHaveBeenCalledWith(["scheduling", "data_extraction", "notification"])
+    expect(planner.createPatchPlan).toHaveBeenCalledWith({
+      prompt: "每天 fetch API then 通知 Slack",
+      currentWorkflowJson: JSON.stringify(currentWorkflow, null, 2),
+      sdkReference: "SDK rules",
+      nodeDocumentation: [{ nodeType: "selected", documentation: "Slack schema" }],
+      suggestedNodes: "Use Schedule Trigger for recurring execution.",
+    })
+  })
+
   it("applies a fresh preview and updates n8n and the registry", async () => {
     const api = {
       getWorkflow: vi.fn(async () => currentWorkflow),

@@ -49,6 +49,7 @@ export type PlannerContext = {
   prompt: string
   sdkReference: string
   nodeDocumentation: PlannerNodeDocumentation[]
+  suggestedNodes?: string
 }
 
 export type PatchPlannerContext = PlannerContext & {
@@ -151,8 +152,11 @@ export class OpencodePlanner {
       "Use only node types supported by the provided n8n MCP documentation.",
       "Do not include secret values, API keys, tokens, passwords, OAuth secrets, or bearer strings.",
       "Use credential reference names only when a node needs credentials.",
+      "Explain why each selected node type is needed in nodeSelection.",
       "",
       `User request:\n${context.prompt}`,
+      "",
+      suggestedNodeGuidance(context),
       "",
       `SDK reference:\n${context.sdkReference}`,
       "",
@@ -168,16 +172,26 @@ export class OpencodePlanner {
       "Preserve existing behavior unless the user request changes it.",
       "Do not include secret values, API keys, tokens, passwords, OAuth secrets, or bearer strings.",
       "Use credential reference names only when a node needs credentials.",
+      "Explain why each selected node type is needed in nodeSelection.",
       "",
       `User request:\n${context.prompt}`,
       "",
       `Current workflow JSON:\n${redactedCurrentWorkflowJson}`,
+      "",
+      suggestedNodeGuidance(context),
       "",
       `SDK reference:\n${context.sdkReference}`,
       "",
       `Node documentation:\n${JSON.stringify(context.nodeDocumentation, null, 2)}`,
     ].join("\n")
   }
+}
+
+function suggestedNodeGuidance(context: PlannerContext): string {
+  const suggestedNodes = context.suggestedNodes?.trim()
+  return suggestedNodes
+    ? `Suggested node guidance:\n${suggestedNodes}`
+    : "Suggested node guidance:\nNo MCP suggested-node guidance was available."
 }
 
 function buildJsonPrompt(text: string, schema: JsonSchema): string {

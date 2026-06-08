@@ -73,6 +73,7 @@ describe("OpencodePlanner", () => {
       prompt: "Build an order webhook",
       sdkReference: "Use n8n workflow rules",
       nodeDocumentation: [{ nodeType: "n8n-nodes-base.webhook", documentation: "Webhook docs" }],
+      suggestedNodes: "Use Schedule Trigger for recurring execution.",
     })
 
     expect(plan).toEqual(simpleWebhookPlan)
@@ -94,6 +95,9 @@ describe("OpencodePlanner", () => {
     const promptInput = promptCalls[0]?.[0]
     expect(promptInput?.body).not.toHaveProperty("format")
     expect(promptInput?.body.parts[0]?.text).toContain('"required": [')
+    expect(promptInput?.body.parts[0]?.text).toContain("Suggested node guidance:")
+    expect(promptInput?.body.parts[0]?.text).toContain("Use Schedule Trigger for recurring execution.")
+    expect(promptInput?.body.parts[0]?.text).toContain("Explain why each selected node type is needed in nodeSelection.")
   })
 
   it("parses JSON from fenced assistant text", async () => {
@@ -166,6 +170,7 @@ describe("OpencodePlanner", () => {
       prompt: "Notify Slack for each order",
       sdkReference: "Use n8n workflow rules",
       nodeDocumentation: [{ nodeType: "n8n-nodes-base.slack", documentation: "Slack docs" }],
+      suggestedNodes: "Use Schedule Trigger for recurring execution.",
       currentWorkflowJson: JSON.stringify({ name: "Order webhook" }),
     })
 
@@ -188,6 +193,9 @@ describe("OpencodePlanner", () => {
     ]>
     const promptInput = promptCalls[0]?.[0]
     expect(promptInput?.body).not.toHaveProperty("format")
+    expect(promptInput?.body.parts[0]?.text).toContain("Suggested node guidance:")
+    expect(promptInput?.body.parts[0]?.text).toContain("Use Schedule Trigger for recurring execution.")
+    expect(promptInput?.body.parts[0]?.text).toContain("Explain why each selected node type is needed in nodeSelection.")
   })
 
   it("redacts secret-looking values from current workflow JSON in patch prompts", async () => {

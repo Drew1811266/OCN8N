@@ -43,6 +43,7 @@ export type UpdateWorkflowDeps = {
     getSdkReference(section: string): Promise<string>
     searchNodes(query: string): Promise<string>
     getNodeTypes(nodeTypes: NodeTypeLookup[]): Promise<string>
+    getSuggestedNodes?(categories: string[]): Promise<string>
   }
   previewStore?: {
     save?(input: SaveUpdatePreviewInput): Promise<UpdatePreview>
@@ -114,13 +115,19 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     nodeTypes.length > 0
       ? [{ nodeType: "selected", documentation: await deps.mcp.getNodeTypes(nodeTypes) }]
       : []
+  const suggestedNodes = await getSuggestedNodesForPrompt(deps.mcp, deps.args.prompt)
 
-  const patchPlan = await deps.planner.createPatchPlan({
-    prompt: deps.args.prompt,
-    currentWorkflowJson: JSON.stringify(currentWorkflow, null, 2),
-    sdkReference,
-    nodeDocumentation,
-  })
+  const patchPlan = await deps.planner.createPatchPlan(
+    withSuggestedNodes(
+      {
+        prompt: deps.args.prompt,
+        currentWorkflowJson: JSON.stringify(currentWorkflow, null, 2),
+        sdkReference,
+        nodeDocumentation,
+      },
+      suggestedNodes,
+    ),
+  )
   const compiledWorkflow = compileWorkflowPlan({
     plan: patchPlan.replacementPlan,
     marker: {
@@ -338,6 +345,45 @@ function toWarning(issue: WorkflowIssue): Warning {
     message: issue.message,
     nodeName: issue.nodeName,
   }
+}
+
+async function getSuggestedNodesForPrompt(
+  mcp: NonNullable<UpdateWorkflowDeps["mcp"]>,
+  prompt: string,
+): Promise<string | undefined> {
+  const categories = suggestedNodeCategories(prompt)
+  if (!mcp.getSuggestedNodes || categories.length === 0) return undefined
+
+  const suggestedNodes = await mcp.getSuggestedNodes(categories)
+  const trimmed = suggestedNodes?.trim()
+  return trimmed ? trimmed : undefined
+}
+
+function withSuggestedNodes(context: PatchPlannerContext, suggestedNodes: string | undefined): PatchPlannerContext {
+  return suggestedNodes ? { ...context, suggestedNodes } : context
+}
+
+function suggestedNodeCategories(prompt: string): string[] {
+  const normalized = prompt.toLowerCase()
+  const categories: string[] = []
+
+  if (/\b(schedule|cron|daily|weekly|hourly)\b|every morning|定时|每天|每周/.test(normalized)) {
+    categories.push("scheduling")
+  }
+  if (/\b(webhook|form)\b|表单/.test(normalized)) {
+    categories.push("form_input")
+  }
+  if (/\b(http|api|fetch|request)\b|接口/.test(normalized)) {
+    categories.push("data_extraction")
+  }
+  if (/\b(transform|filter|if|merge|set)\b|整理|过滤|判断/.test(normalized)) {
+    categories.push("data_transformation")
+  }
+  if (/\b(email|slack|notify|notification)\b|提醒|通知/.test(normalized)) {
+    categories.push("notification")
+  }
+
+  return categories.slice(0, 4)
 }
 
 function isPreviewExpired(preview: UpdatePreview, now: Date): boolean {

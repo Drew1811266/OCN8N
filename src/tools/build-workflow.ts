@@ -41,6 +41,7 @@ export type BuildWorkflowDeps = {
     getSdkReference(section: string): Promise<string>
     searchNodes(query: string): Promise<string>
     getNodeTypes(nodeTypes: NodeTypeLookup[]): Promise<string>
+    getSuggestedNodes?(categories: string[]): Promise<string>
   }
   credentialResolver?: WorkflowCredentialResolver
   now?: () => Date
@@ -65,11 +66,17 @@ export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkf
     nodeTypes.length > 0
       ? [{ nodeType: "selected", documentation: await deps.mcp.getNodeTypes(nodeTypes) }]
       : []
-  const plan = await deps.planner.createPlan({
-    prompt: deps.args.prompt,
-    sdkReference,
-    nodeDocumentation,
-  })
+  const suggestedNodes = await getSuggestedNodesForPrompt(deps.mcp, deps.args.prompt)
+  const plan = await deps.planner.createPlan(
+    withSuggestedNodes(
+      {
+        prompt: deps.args.prompt,
+        sdkReference,
+        nodeDocumentation,
+      },
+      suggestedNodes,
+    ),
+  )
   const compiledPlan: WorkflowPlan = {
     ...plan,
     name: deps.args.name ?? plan.name,
@@ -164,4 +171,43 @@ function toWarning(issue: WorkflowIssue): Warning {
     message: issue.message,
     nodeName: issue.nodeName,
   }
+}
+
+async function getSuggestedNodesForPrompt(
+  mcp: BuildWorkflowDeps["mcp"],
+  prompt: string,
+): Promise<string | undefined> {
+  const categories = suggestedNodeCategories(prompt)
+  if (!mcp.getSuggestedNodes || categories.length === 0) return undefined
+
+  const suggestedNodes = await mcp.getSuggestedNodes(categories)
+  const trimmed = suggestedNodes?.trim()
+  return trimmed ? trimmed : undefined
+}
+
+function withSuggestedNodes(context: PlannerContext, suggestedNodes: string | undefined): PlannerContext {
+  return suggestedNodes ? { ...context, suggestedNodes } : context
+}
+
+function suggestedNodeCategories(prompt: string): string[] {
+  const normalized = prompt.toLowerCase()
+  const categories: string[] = []
+
+  if (/\b(schedule|cron|daily|weekly|hourly)\b|every morning|定时|每天|每周/.test(normalized)) {
+    categories.push("scheduling")
+  }
+  if (/\b(webhook|form)\b|表单/.test(normalized)) {
+    categories.push("form_input")
+  }
+  if (/\b(http|api|fetch|request)\b|接口/.test(normalized)) {
+    categories.push("data_extraction")
+  }
+  if (/\b(transform|filter|if|merge|set)\b|整理|过滤|判断/.test(normalized)) {
+    categories.push("data_transformation")
+  }
+  if (/\b(email|slack|notify|notification)\b|提醒|通知/.test(normalized)) {
+    categories.push("notification")
+  }
+
+  return categories.slice(0, 4)
 }

@@ -291,6 +291,38 @@ describe("buildWorkflow", () => {
     ])
   })
 
+  it("passes MCP suggested-node guidance into planning when prompt matches categories", async () => {
+    const api = {
+      createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
+    }
+    const registry = { upsert: vi.fn(async () => undefined) }
+    const planner = { createPlan: vi.fn(async () => simpleWebhookPlan) }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "n8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "Slack schema"),
+      getSuggestedNodes: vi.fn(async () => "Use Schedule Trigger for recurring execution."),
+    }
+
+    await buildWorkflow({
+      args: { prompt: "Every morning fetch an API and notify Slack" },
+      config,
+      api,
+      registry,
+      planner,
+      mcp,
+      now: () => new Date("2026-06-04T00:00:00.000Z"),
+    })
+
+    expect(mcp.getSuggestedNodes).toHaveBeenCalledWith(["scheduling", "data_extraction", "notification"])
+    expect(planner.createPlan).toHaveBeenCalledWith({
+      prompt: "Every morning fetch an API and notify Slack",
+      sdkReference: "SDK rules",
+      nodeDocumentation: [{ nodeType: "selected", documentation: "Slack schema" }],
+      suggestedNodes: "Use Schedule Trigger for recurring execution.",
+    })
+  })
+
   it("skips node type lookup and plans without node documentation when no node ids match", async () => {
     const api = {
       createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
