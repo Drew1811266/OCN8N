@@ -786,7 +786,10 @@ v0.9.0 opt-in E2E 覆盖：
 v0.9.0 最近一次本地验证结果（不含 Docker E2E）：
 
 - TypeScript：`./node_modules/.bin/tsc --noEmit` 通过。
-- Vitest：`./node_modules/.bin/vitest run` 通过，21 个测试文件，224 个测试通过。
+- Vitest：`./node_modules/.bin/vitest run` 通过，23 个测试文件，232 个测试通过。
+- Build：`./node_modules/.bin/tsup` 通过。
+- Package boundary：`node scripts/check-package-files.mjs` 通过。
+- npm pack：当前 Codex desktop shell 中 `npm` 不可用，`npm pack --dry-run --json` 需要在 CI 或带 npm 的本地 shell 中复跑。
 - 当前环境没有 Docker CLI，`env -u N8N_E2E_API_KEY node scripts/run-e2e.mjs` 返回 `spawn docker ENOENT` 诊断；有 Docker 和本地测试 API Key 时再运行 `N8N_E2E_API_KEY=<你的测试 API Key> npm run test:e2e` 做完整 E2E。
 
 ## 当前版本状态
