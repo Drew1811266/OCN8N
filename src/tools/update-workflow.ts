@@ -22,16 +22,18 @@ const previewTtlMs = 30 * 60 * 1000
 export type UpdateWorkflowArgs =
   | { workflowId: string; mode: "preview"; prompt: string; previewId?: never }
   | { workflowId: string; mode: "apply"; previewId: string; prompt?: never }
+  | { workflowId: string; mode: "rollback-preview"; previewId: string; prompt?: never }
+  | { workflowId: string; mode: "rollback-apply"; previewId: string; prompt?: never }
 
 export type UpdateWorkflowResult = {
   workflowId: string
   name: string
   url: string
-  mode: "preview" | "apply"
+  mode: "preview" | "apply" | "rollback-preview" | "rollback-apply"
   previewId?: string
   summary: string
   changes: string[]
-  diff?: WorkflowDiff
+  diff: WorkflowDiff
   missingCredentials: CredentialGap[]
   credentialActions: CredentialSetupAction[]
   warnings: Warning[]
@@ -91,12 +93,20 @@ type ApplyUpdateDeps = UpdateWorkflowDeps & {
   args: Extract<UpdateWorkflowArgs, { mode: "apply" }>
 }
 
+type RollbackUpdateDeps = UpdateWorkflowDeps & {
+  args: Extract<UpdateWorkflowArgs, { mode: "rollback-preview" | "rollback-apply" }>
+}
+
 export async function updateWorkflow(deps: UpdateWorkflowDeps): Promise<UpdateWorkflowResult> {
   if (deps.args.mode === "preview") {
     return previewUpdate(deps as PreviewUpdateDeps)
   }
 
-  return applyUpdate(deps as ApplyUpdateDeps)
+  if (deps.args.mode === "apply") {
+    return applyUpdate(deps as ApplyUpdateDeps)
+  }
+
+  return rollbackUpdate(deps as RollbackUpdateDeps)
 }
 
 async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowResult> {
@@ -300,9 +310,120 @@ async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult>
     mode: "apply",
     summary: preview.summary,
     changes: preview.changes,
+    diff: preview.diff,
     missingCredentials: [],
     credentialActions: [],
     warnings: proposedValidation.warnings.map(toWarning),
+  }
+}
+
+async function rollbackUpdate(deps: RollbackUpdateDeps): Promise<UpdateWorkflowResult> {
+  const previewStore = deps.previewStore
+  const registry = deps.registry
+
+  if (!previewStore?.get || !registry?.get || (deps.args.mode === "rollback-apply" && !deps.api.updateWorkflow)) {
+    throw new N8nBuilderError("Rollback dependencies are not configured.", "UPDATE_ROLLBACK_DEPS_MISSING")
+  }
+
+  const now = deps.now?.() ?? new Date()
+  const preview = await previewStore.get(deps.args.previewId, now)
+  if (
+    !preview ||
+    preview.workflowId !== deps.args.workflowId ||
+    isPreviewExpired(preview, now) ||
+    stableHash(preview.baseWorkflow) !== preview.baseWorkflowHash ||
+    stableHash(preview.proposedWorkflow) !== preview.proposedWorkflowHash
+  ) {
+    throw new N8nBuilderError(
+      "Rollback preview is missing, expired, invalid, or for a different workflow.",
+      "UPDATE_PREVIEW_INVALID",
+    )
+  }
+
+  const currentWorkflow = await deps.api.getWorkflow(deps.args.workflowId)
+  if (!matchesPreviewProposalHash(currentWorkflow, preview.proposedWorkflowHash)) {
+    throw new N8nBuilderError(
+      "Workflow changed after preview was applied and cannot be rolled back safely.",
+      "UPDATE_ROLLBACK_STALE",
+    )
+  }
+
+  const currentValidation = validateWorkflowForSave({
+    workflow: currentWorkflow,
+    requireManagedMarker: true,
+    allowActiveUpdate: false,
+  })
+
+  if (!currentValidation.valid) {
+    throw new N8nBuilderError(
+      "Workflow cannot be rolled back because the current workflow is not updateable.",
+      "WORKFLOW_UPDATE_BLOCKED",
+      redactedValidationDetails(currentValidation),
+    )
+  }
+
+  await requireRegistryOwnership(registry, deps.args.workflowId, deps.config.baseUrl)
+
+  const rollbackWorkflow = preview.baseWorkflow
+  const rollbackValidation = validateWorkflowForSave({
+    workflow: rollbackWorkflow,
+    requireManagedMarker: true,
+    allowActiveUpdate: false,
+  })
+
+  if (!rollbackValidation.valid) {
+    throw new N8nBuilderError("Rollback workflow failed validation.", "PROPOSED_WORKFLOW_INVALID", {
+      issues: rollbackValidation.issues,
+      warnings: rollbackValidation.warnings,
+    })
+  }
+
+  const diff = createWorkflowDiff(currentWorkflow, rollbackWorkflow)
+  const url = workflowUrl(deps.config.baseUrl, deps.args.workflowId)
+
+  if (deps.args.mode === "rollback-preview") {
+    return {
+      workflowId: deps.args.workflowId,
+      name: rollbackWorkflow.name,
+      url,
+      mode: deps.args.mode,
+      summary: `Rollback ${deps.args.previewId}`,
+      changes: [`Restore workflow state from before preview ${deps.args.previewId}.`],
+      diff,
+      missingCredentials: [],
+      credentialActions: [],
+      warnings: rollbackValidation.warnings.map(toWarning),
+    }
+  }
+
+  const updateWorkflowApi = deps.api.updateWorkflow
+  if (!updateWorkflowApi) {
+    throw new N8nBuilderError("Rollback dependencies are not configured.", "UPDATE_ROLLBACK_DEPS_MISSING")
+  }
+
+  const updatedWorkflow = await updateWorkflowApi(deps.args.workflowId, rollbackWorkflow)
+  await registry.upsert({
+    workflowId: deps.args.workflowId,
+    name: updatedWorkflow.name,
+    url,
+    baseUrl: deps.config.baseUrl,
+    managedBy,
+    managedByVersion: deps.config.pluginVersion,
+    lastPlanHash: stableHash(rollbackWorkflow),
+    lastUpdatedAt: now.toISOString(),
+  })
+
+  return {
+    workflowId: deps.args.workflowId,
+    name: updatedWorkflow.name,
+    url,
+    mode: deps.args.mode,
+    summary: `Rolled back ${deps.args.previewId}`,
+    changes: [`Restored workflow state from before preview ${deps.args.previewId}.`],
+    diff,
+    missingCredentials: [],
+    credentialActions: [],
+    warnings: rollbackValidation.warnings.map(toWarning),
   }
 }
 
@@ -449,6 +570,13 @@ function suggestedNodeCategories(prompt: string): string[] {
 function isPreviewExpired(preview: UpdatePreview, now: Date): boolean {
   const expiresAt = Date.parse(preview.expiresAt)
   return Number.isNaN(expiresAt) || expiresAt <= now.getTime()
+}
+
+function matchesPreviewProposalHash(workflow: N8nWorkflow, proposedWorkflowHash: string): boolean {
+  if (stableHash(workflow) === proposedWorkflowHash) return true
+
+  const { id: _id, ...workflowWithoutId } = workflow
+  return stableHash(workflowWithoutId) === proposedWorkflowHash
 }
 
 function mergeWorkflowLevelFields(input: {

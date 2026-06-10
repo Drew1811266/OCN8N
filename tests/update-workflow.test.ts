@@ -775,10 +775,113 @@ describe("updateWorkflow", () => {
       mode: "apply",
       summary: "Apply Slack",
       changes: ["Add Slack node"],
+      diff: createWorkflowDiff(currentWorkflow, proposedWorkflow),
       missingCredentials: [],
       credentialActions: [],
       warnings: [],
     })
+  })
+
+  it("previews rollback from the current proposed workflow back to the saved base workflow", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
+      updateWorkflow: vi.fn(),
+    }
+    const previewStore = {
+      get: vi.fn(async () => previewRecord()),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    const result = await updateWorkflow({
+      args: { workflowId: "wf_1", mode: "rollback-preview", previewId: "preview_1" },
+      config,
+      api,
+      previewStore,
+      registry,
+      now: () => new Date("2026-06-04T00:10:00.000Z"),
+    })
+
+    expect(api.updateWorkflow).not.toHaveBeenCalled()
+    expect(result.mode).toBe("rollback-preview")
+    expect(result.summary).toBe("Rollback preview_1")
+    expect(result.diff).toEqual(createWorkflowDiff(proposedWorkflow, currentWorkflow))
+  })
+
+  it("applies rollback only when current workflow still matches the preview proposal", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
+      updateWorkflow: vi.fn(async () => ({ ...currentWorkflow, id: "wf_1" })),
+    }
+    const previewStore = {
+      get: vi.fn(async () => previewRecord()),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    const result = await updateWorkflow({
+      args: { workflowId: "wf_1", mode: "rollback-apply", previewId: "preview_1" },
+      config,
+      api,
+      previewStore,
+      registry,
+      now: () => new Date("2026-06-04T00:10:00.000Z"),
+    })
+
+    expect(api.updateWorkflow).toHaveBeenCalledWith("wf_1", currentWorkflow)
+    expect(registry.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflowId: "wf_1",
+        lastPlanHash: stableHash(currentWorkflow),
+      }),
+    )
+    expect(result.mode).toBe("rollback-apply")
+    expect(result.diff).toEqual(createWorkflowDiff(proposedWorkflow, currentWorkflow))
+  })
+
+  it("blocks rollback when current workflow no longer matches the preview proposal", async () => {
+    const changedWorkflow = {
+      ...proposedWorkflow,
+      nodes: [
+        ...proposedWorkflow.nodes,
+        {
+          name: "Manual Edit",
+          type: "n8n-nodes-base.set",
+          typeVersion: 3,
+          position: [900, 0] as [number, number],
+          parameters: {},
+        },
+      ],
+    }
+    const api = {
+      getWorkflow: vi.fn(async () => ({ ...changedWorkflow, id: "wf_1" })),
+      updateWorkflow: vi.fn(),
+    }
+    const previewStore = {
+      get: vi.fn(async () => previewRecord()),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await expect(
+      updateWorkflow({
+        args: { workflowId: "wf_1", mode: "rollback-apply", previewId: "preview_1" },
+        config,
+        api,
+        previewStore,
+        registry,
+        now: () => new Date("2026-06-04T00:10:00.000Z"),
+      }),
+    ).rejects.toMatchObject({
+      code: "UPDATE_ROLLBACK_STALE",
+    } satisfies Partial<N8nBuilderError>)
+    expect(api.updateWorkflow).not.toHaveBeenCalled()
   })
 
   it("blocks apply updates when a valid preview targets a workflow missing from the registry", async () => {
