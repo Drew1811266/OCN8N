@@ -2,9 +2,9 @@
 
 `opencode-n8n-builder` 是一个用于连接 OpenCode 和 n8n 的插件。它允许用户用自然语言描述自动化需求，由 OpenCode 结合 n8n 官方 MCP 节点文档生成、检查并安全更新 n8n workflow 草稿。
 
-当前版本：`0.5.0`
+当前版本：`0.6.0`
 
-当前状态：`v0.5` 版本。核心的“托管 workflow”生命周期保持 v0.1-v0.4 的保守安全边界，并新增 credential setup UX 和递归脱敏能力，让用户可以知道凭据是已复用、已从环境变量创建，还是需要补环境变量、补配置映射或到 n8n UI 手动完成 OAuth。
+当前状态：`v0.6` 版本。核心的“托管 workflow”生命周期保持 v0.1-v0.5 的保守安全边界，并新增已有 inactive workflow 的显式 claim/import 流程。用户可以先只读预览接管资格，再在确认后把符合条件的 workflow 写入本地 registry 和 n8n 托管 marker。
 
 ## 项目目标
 
@@ -97,16 +97,26 @@ v0.4 仍不承诺每个官方节点和每种参数组合都已被真实 n8n E2E 
 
 v0.5 仍不自动完成 OAuth consent，不存储 credential secret，也不修改非本插件创建和登记的 workflow。
 
+## v0.6.0 新增能力
+
+- 新增 `n8n_claim_workflow` 工具，用于显式接管已有 inactive n8n workflow。
+- `preview` 模式只读取 workflow，返回 eligibility、风险和结构摘要，不写 n8n，也不写本地 registry。
+- `apply` 模式要求 `confirm: true`，并会重新读取 workflow、重新校验资格，然后写入 `opencode-n8n-builder` marker 和本地 registry。
+- 已经带有本插件 marker 但本地 registry 缺失的 workflow，可以通过 claim apply 修复 registry。
+- active workflow、其他工具管理的 workflow、base URL 不匹配的 registry 记录、包含疑似明文密钥的 workflow 都会被阻断。
+- 成功 claim 后，既有 `n8n_inspect_workflow` 和 `n8n_update_workflow` 安全边界继续适用。
+
+v0.6 仍不接管 active workflow，不自动修复不安全节点，不导入执行历史，也不放宽 update preview/apply 的 stale 检查。
+
 ## 当前暂不支持
 
-- 修改任意已有 n8n workflow。
-- 修改 active workflow。
+- 修改或接管 active workflow。
 - 自动把 workflow 放入 n8n project 或 folder。
 - 自动完成 OAuth 授权流程。
 - 可视化 workflow diff。
 - 创建或更新后自动激活 workflow。
 - 保证支持所有第三方或社区节点。
-- 把已有 workflow 一键导入为托管 workflow。
+- 导入 workflow 执行历史。
 
 ## 节点兼容性声明（v0.4+）
 
@@ -150,7 +160,7 @@ flowchart TD
 - `src/security.ts`：明文密钥检测、私网 URL warning 和递归 secret redaction。
 - `src/registry.ts`：管理本地托管 workflow registry。
 - `src/preview-store.ts`：保存短期 update preview。
-- `src/tools/*`：分别实现 build、update、inspect、list 工具编排。
+- `src/tools/*`：分别实现 build、update、claim、inspect、list 工具编排。
 
 ## OpenCode 工具
 
@@ -211,6 +221,42 @@ flowchart TD
 - 调用 n8n API 更新 workflow。
 - 更新本地 registry。
 
+### `n8n_claim_workflow`
+
+显式接管已有 inactive n8n workflow，使其进入当前 OpenCode workspace 的托管生命周期。
+
+参数：
+
+- `workflowId`：必填，n8n workflow ID。
+- `mode`：必填，`preview` 或 `apply`。
+- `confirm`：`apply` 模式必须为 `true`。
+
+`preview` 行为：
+
+- 读取目标 workflow。
+- 校验 workflow 是否为 inactive。
+- 检查是否已有其他不兼容 ownership marker。
+- 检查本地 registry 是否已有同 workflow ID 且属于其他 n8n base URL 的记录。
+- 执行结构校验、疑似明文密钥检查和私网 URL warning。
+- 返回 claim eligibility、风险列表、节点数量、连接数量、触发节点类型和 credential 类型。
+- 不调用 n8n update API。
+- 不写本地 registry。
+
+`apply` 行为：
+
+- 要求 `confirm: true`。
+- 重新读取 workflow 并重新执行 `preview` 的 eligibility 检查。
+- 对未托管且符合条件的 inactive workflow 写入 `opencode-n8n-builder` marker/tag。
+- 对已带有本插件 marker 但本地 registry 缺失的 workflow，只修复本地 registry，不重复写 marker。
+- 写入本地 registry 后，既有 inspect 和 update preview/apply 流程即可继续使用。
+
+安全限制：
+
+- 不接管 active workflow。
+- 不接管带有其他 `meta.managedBy` 标记的 workflow。
+- 不接管包含疑似明文密钥参数的 workflow。
+- 不跨 n8n base URL 修复 registry 记录。
+
 ### `n8n_inspect_workflow`
 
 查看托管 workflow 的摘要信息。
@@ -267,6 +313,13 @@ update 还额外要求：
 - preview 未过期。
 - preview 中 proposed workflow hash 未被篡改。
 - 当前 n8n workflow hash 仍然等于生成 preview 时的 base hash。
+
+claim 采用更窄的显式接管流程：
+
+- `preview` 只读，不写 n8n，也不写本地 registry。
+- `apply` 必须设置 `confirm: true`。
+- `apply` 会重新读取 workflow 并重新校验 eligibility。
+- 只有 inactive、结构有效、没有疑似明文密钥、没有不兼容 marker、没有 registry base URL 冲突的 workflow 才能被接管。
 
 这些限制用于避免：
 
@@ -508,7 +561,7 @@ npm run build
 
 ## 真实 n8n 实例验证（v0.2+）
 
-v0.2 增加了一个显式触发的 E2E 验证层，用本地 Docker n8n 实例验证插件的核心生命周期。v0.3 在该 E2E 层中继续覆盖 MCP `get_suggested_nodes`、`validate_workflow` 和 draft planner 路径。v0.4 继续扩展低风险节点兼容性场景。v0.5 暂不新增 Docker E2E 场景，重点补充 credential setup UX 和错误脱敏的默认测试。默认的 `npm test` 不会启动 Docker，也不要求真实 n8n。
+v0.2 增加了一个显式触发的 E2E 验证层，用本地 Docker n8n 实例验证插件的核心生命周期。v0.3 在该 E2E 层中继续覆盖 MCP `get_suggested_nodes`、`validate_workflow` 和 draft planner 路径。v0.4 继续扩展低风险节点兼容性场景。v0.5 补充 credential setup UX 和错误脱敏的默认测试。v0.6 增加已有 inactive workflow 的 claim/import 场景。默认的 `npm test` 不会启动 Docker，也不要求真实 n8n。
 
 前置条件：
 
@@ -557,7 +610,7 @@ N8N_E2E_KEEP_ALIVE=1 N8N_E2E_API_KEY=<你的测试 API Key> npm run test:e2e
 
 ## 测试覆盖
 
-v0.5.0 默认测试覆盖：
+v0.6.0 默认测试覆盖：
 
 - OpenCode 插件注册和工具 wiring。
 - 配置从环境变量和 OpenCode config 中加载。
@@ -578,33 +631,39 @@ v0.5.0 默认测试覆盖：
 - credential setup action helper。
 - build/update 结果中的 `credentialActions`。
 - credential config metadata：`authMode`、`setupUrl`、`docs`。
+- workflow ownership state helper。
+- claim workflow preview/apply、confirm、registry repair 和阻断条件。
 - registry 和 preview store 持久化。
 - build workflow 编排。
 - update preview/apply 安全边界。
 - inspect/list 安全边界。
 - v0.4 低风险场景 fixture：webhook transform response、schedule/http/if/set、webhook branch merge、API polling notice。
 
-v0.5.0 opt-in E2E 覆盖：
+v0.6.0 opt-in E2E 覆盖：
 
 - Docker runner 的 Docker/Compose 诊断、n8n readiness、API Key bootstrap 提示、环境变量映射和 cleanup 参数。
 - 真实 n8n API lifecycle：创建、读取、更新和清理测试 workflow。
 - 真实 MCP endpoint smoke 检查，覆盖 `get_sdk_reference`、`search_nodes`、`get_node_types`、`get_suggested_nodes` 和 `validate_workflow`；需要 Bearer auth 时支持 `N8N_E2E_MCP_TOKEN`。
 - 插件 smoke E2E：通过插件工具路径连接真实测试配置。
 - v0.4 低风险兼容性场景：Webhook + Set + Respond to Webhook、Schedule + HTTP Request + IF + Set、Webhook + Switch + Merge、Schedule + HTTP Request + IF + Set notice。
+- v0.6 claim/import 场景：创建外部 inactive workflow -> claim preview -> claim apply -> inspect -> update preview。
 
-v0.5.0 最近一次本地验证结果（不含 Docker E2E）：
+v0.6.0 最近一次本地验证结果（不含 Docker E2E）：
 
 - TypeScript：`./node_modules/.bin/tsc --noEmit` 通过。
-- Vitest：`./node_modules/.bin/vitest run` 通过，18 个测试文件，191 个测试通过。
+- Vitest：`./node_modules/.bin/vitest run` 通过，19 个测试文件，202 个测试通过。
 - 当前环境没有 Docker CLI，`env -u N8N_E2E_API_KEY node scripts/run-e2e.mjs` 返回 `spawn docker ENOENT` 诊断；有 Docker 和本地测试 API Key 时再运行 `N8N_E2E_API_KEY=<你的测试 API Key> npm run test:e2e` 做完整 E2E。
 
 ## 当前版本状态
 
-`0.5.0` 是 credential setup UX 和 secret-safe 错误详情里程碑：
+`0.6.0` 是已有 inactive workflow claim/import 里程碑：
 
 - 插件运行时已接入 OpenCode。
-- build/update/inspect/list 四个工具已实现。
+- build/update/claim/inspect/list 五个工具已实现。
 - workflow ownership 和 active workflow 安全限制已实现。
+- `n8n_claim_workflow` 支持只读 preview 和需要 `confirm: true` 的 apply。
+- 未托管 inactive workflow 可以被显式接管，已带本插件 marker 但缺 registry 的 workflow 可以修复 registry。
+- active workflow、不兼容 owner、registry base URL mismatch、疑似明文密钥都会阻断 claim。
 - credential 引用和明文密钥防护已实现。
 - build 和 update preview 会返回 `credentialActions`，说明 credential 已复用、已创建或需要用户补操作。
 - OAuth credential 会返回 n8n UI handoff 指引，不自动完成 OAuth 授权。
@@ -628,7 +687,7 @@ v0.5.0 最近一次本地验证结果（不含 Docker E2E）：
 - 支持用户显式确认后的 active workflow 操作。
 - 在 n8n API 支持明确后增加 project/folder placement。
 - 增强 credential provider 支持。
-- 增加已有 workflow 的显式导入或 claim 流程。
+- 深化已有 workflow claim/import 的场景覆盖，例如更丰富的风险解释和迁移辅助。
 - 针对更多真实 workflow 形态加强 workflow-to-SDK validation code 生成覆盖。
 - 完善 OpenCode 插件发布和安装文档。
 
