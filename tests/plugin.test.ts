@@ -76,7 +76,7 @@ describe("plugin exports", () => {
     expect(typeof N8nBuilderPlugin).toBe("function")
   })
 
-  it("registers the four n8n tools", async () => {
+  it("registers the five n8n tools", async () => {
     const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
 
     const result = await plugin(mockPluginInput())
@@ -84,10 +84,12 @@ describe("plugin exports", () => {
     expect(Object.keys(result.tool ?? {})).toEqual([
       "n8n_build_workflow",
       "n8n_update_workflow",
+      "n8n_claim_workflow",
       "n8n_inspect_workflow",
       "n8n_list_managed_workflows",
     ])
     expect(Object.keys(result.tool?.n8n_build_workflow.args ?? {})).toEqual(["prompt", "name"])
+    expect(Object.keys(result.tool?.n8n_claim_workflow.args ?? {})).toEqual(["workflowId", "mode", "confirm"])
   })
 
   it("logs the configured version during initialization", async () => {
@@ -219,6 +221,76 @@ describe("plugin exports", () => {
           expect.objectContaining({
             workflowId: "wf_1",
             name: "Orders",
+          }),
+        )
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    })
+  })
+
+  it("previews workflow claim without requiring MCP configuration", async () => {
+    await withoutN8nEnv(async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
+      const originalFetch = globalThis.fetch
+      const fetchMock = vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            id: "wf_1",
+            name: "External Orders",
+            active: false,
+            nodes: [
+              {
+                name: "Manual Trigger",
+                type: "n8n-nodes-base.manualTrigger",
+                typeVersion: 1,
+                position: [0, 0],
+                parameters: {},
+              },
+            ],
+            connections: {},
+            settings: {},
+            tags: [],
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        )
+      })
+      globalThis.fetch = fetchMock as typeof fetch
+
+      try {
+        const plugin = createN8nBuilderPlugin({ version: "0.6.0" })
+        const result = await plugin(
+          mockPluginInput({
+            directory,
+            opencodeConfig: {
+              n8n: {
+                baseUrl: "https://demo/api/v1",
+                apiKey: "key",
+              },
+            },
+          }),
+        )
+
+        const output = parseToolOutput(
+          await result.tool?.n8n_claim_workflow.execute({ workflowId: "wf_1", mode: "preview" }, {} as never),
+        )
+
+        expect(fetchMock).toHaveBeenCalledWith(
+          "https://demo/api/v1/workflows/wf_1",
+          expect.objectContaining({
+            method: "GET",
+            headers: expect.objectContaining({ "X-N8N-API-KEY": "key" }),
+          }),
+        )
+        expect(output).toEqual(
+          expect.objectContaining({
+            workflowId: "wf_1",
+            mode: "preview",
+            eligible: true,
+            action: "claim",
           }),
         )
       } finally {

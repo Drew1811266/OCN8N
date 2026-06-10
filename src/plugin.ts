@@ -8,6 +8,7 @@ import { OpencodePlanner } from "./opencode-planner.js"
 import { PreviewStore } from "./preview-store.js"
 import { WorkflowRegistry } from "./registry.js"
 import { buildWorkflow } from "./tools/build-workflow.js"
+import { claimWorkflow, type ClaimWorkflowArgs } from "./tools/claim-workflow.js"
 import { inspectWorkflow } from "./tools/inspect-workflow.js"
 import { listManagedWorkflows } from "./tools/list-managed-workflows.js"
 import { updateWorkflow, type UpdateWorkflowArgs } from "./tools/update-workflow.js"
@@ -17,7 +18,7 @@ export type N8nBuilderPluginOptions = {
 }
 
 export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): Plugin {
-  const version = options.version ?? "0.3.0"
+  const version = options.version ?? "0.6.0"
 
   const plugin: Plugin = async ({ client, directory }) => {
     await client.app.log({
@@ -168,6 +169,27 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
           },
         }),
 
+        n8n_claim_workflow: tool({
+          description:
+            "Preview or apply explicit onboarding of an existing inactive n8n workflow into OpenCode management.",
+          args: {
+            workflowId: tool.schema.string().min(1),
+            mode: tool.schema.enum(["preview", "apply"]),
+            confirm: tool.schema.boolean().optional(),
+          },
+          async execute(args) {
+            const resolved = await apiDeps()
+            const result = await claimWorkflow({
+              args: toClaimWorkflowArgs(args),
+              config: resolved.config,
+              api: resolved.api,
+              registry: resolved.registry,
+            })
+
+            return jsonOutput("n8n workflow claim", result)
+          },
+        }),
+
         n8n_inspect_workflow: tool({
           description:
             "Inspect a managed n8n workflow and report nodes, connections, credential gaps, and validation issues.",
@@ -216,6 +238,25 @@ async function getOpencodeConfig(client: PluginInput["client"], directory: strin
   }
 
   return response
+}
+
+function toClaimWorkflowArgs(args: {
+  workflowId: string
+  mode: "preview" | "apply"
+  confirm?: boolean
+}): ClaimWorkflowArgs {
+  if (args.mode === "preview") {
+    return {
+      workflowId: args.workflowId,
+      mode: args.mode,
+    }
+  }
+
+  return {
+    workflowId: args.workflowId,
+    mode: args.mode,
+    confirm: args.confirm,
+  }
 }
 
 function toUpdateWorkflowArgs(args: {
