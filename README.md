@@ -801,7 +801,7 @@ v1.0.0 opt-in E2E 覆盖：
 v1.0.0 最近一次本地验证结果（不含 Docker E2E）：
 
 - TypeScript：`./node_modules/.bin/tsc --noEmit` 通过。
-- Vitest：`./node_modules/.bin/vitest run` 通过，23 个测试文件，232 个测试通过。
+- Vitest：`./node_modules/.bin/vitest run` 通过，24 个测试文件，235 个测试通过。
 - Build：`./node_modules/.bin/tsup` 通过。
 - Package boundary：`node scripts/check-package-files.mjs` 通过。
 - npm pack：当前 Codex desktop shell 中 `npm` 不可用，`npm pack --dry-run --json` 需要在 CI 或带 npm 的本地 shell 中复跑。
