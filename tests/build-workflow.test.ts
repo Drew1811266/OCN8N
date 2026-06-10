@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { N8nBuilderError } from "../src/errors.js"
 import { buildWorkflow } from "../src/tools/build-workflow.js"
 import type { PluginConfig } from "../src/types.js"
-import type { WorkflowDraft, WorkflowPlan } from "../src/workflow-plan.js"
+import { workflowPlanSchema, type WorkflowDraft, type WorkflowPlan } from "../src/workflow-plan.js"
 import { simpleWebhookPlan } from "./fixtures/workflows.js"
 
 const config: PluginConfig = {
@@ -210,7 +210,7 @@ describe("buildWorkflow", () => {
   })
 
   it("returns compatibility warnings for dynamic node types", async () => {
-    const dynamicPlan: WorkflowPlan = {
+    const dynamicPlan: WorkflowPlan = workflowPlanSchema.parse({
       name: "Dynamic workflow",
       summary: "Uses an unverified node.",
       nodes: [
@@ -232,7 +232,7 @@ describe("buildWorkflow", () => {
         },
       ],
       connections: [{ from: "manual", to: "dynamic" }],
-    }
+    })
     const api = {
       createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
     }

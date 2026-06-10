@@ -7,7 +7,7 @@ import type { PluginConfig } from "../src/types.js"
 import { updateWorkflow } from "../src/tools/update-workflow.js"
 import type { N8nWorkflow } from "../src/validator.js"
 import { compileWorkflowPlan } from "../src/workflow-compiler.js"
-import type { WorkflowPlan } from "../src/workflow-plan.js"
+import { workflowPlanSchema, type WorkflowPlan } from "../src/workflow-plan.js"
 import { simpleWebhookPlan } from "./fixtures/workflows.js"
 
 const config: PluginConfig = {
@@ -306,7 +306,7 @@ describe("updateWorkflow", () => {
   })
 
   it("returns compatibility warnings for dynamic node types in preview", async () => {
-    const dynamicPlan: WorkflowPlan = {
+    const dynamicPlan: WorkflowPlan = workflowPlanSchema.parse({
       name: "Dynamic workflow",
       summary: "Uses an unverified node.",
       nodes: [
@@ -328,7 +328,7 @@ describe("updateWorkflow", () => {
         },
       ],
       connections: [{ from: "manual", to: "dynamic" }],
-    }
+    })
     const api = {
       getWorkflow: vi.fn(async () => currentWorkflow),
       updateWorkflow: vi.fn(),

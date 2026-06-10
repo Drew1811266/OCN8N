@@ -7,10 +7,14 @@ import { updateWorkflow } from "../../src/tools/update-workflow.js"
 import type { N8nWorkflow } from "../../src/validator.js"
 import { cleanupE2eContext, createE2eContext, trackWorkflow, type E2eContext } from "./helpers/e2e-clients.js"
 import {
+  e2eApiPollingNoticePlan,
   e2eManualSetPlan,
   e2eManualSetSdkCode,
+  e2eScheduleHttpIfSetPlan,
   e2eUpdatedManualIfPlan,
   e2eUpdatedManualIfSdkCode,
+  e2eWebhookBranchMergePlan,
+  e2eWebhookTransformResponsePlan,
 } from "./helpers/test-workflows.js"
 
 let context: E2eContext | undefined
@@ -174,6 +178,48 @@ describe("managed workflow lifecycle E2E", () => {
         }),
       ]),
     )
+  })
+
+  it("creates the v0.4 low-risk compatibility scenario workflows", async () => {
+    context = await createE2eContext()
+    const scenarios = [
+      e2eWebhookTransformResponsePlan,
+      e2eScheduleHttpIfSetPlan,
+      e2eWebhookBranchMergePlan,
+      e2eApiPollingNoticePlan,
+    ]
+
+    for (const [index, plan] of scenarios.entries()) {
+      const buildResult = await buildWorkflow({
+        args: {
+          prompt: `Create v0.4 compatibility scenario ${index + 1}`,
+          name: `${context.runId} ${plan.name}`,
+        },
+        config: context.config,
+        api: trackingBuildApi(context),
+        registry: context.registry,
+        planner: {
+          createDraft: async () => ({
+            plan,
+            sdkCode: "generated from compiled workflow by plugin",
+            nodeSelection: plan.nodes.map((node) => ({
+              nodeType: node.type,
+              reason: `Scenario fixture uses ${node.name}.`,
+            })),
+          }),
+        },
+        mcp: context.mcp,
+        now: deterministicNow(`2026-06-08T00:${String(index).padStart(2, "0")}:00.000Z`),
+      })
+
+      expect(buildResult.workflowId).toEqual(expect.any(String))
+      expect(buildResult.nodeCount).toBe(plan.nodes.length)
+      expect(buildResult.warnings.filter((warning) => warning.code === "NODE_COMPATIBILITY_DYNAMIC")).toEqual([])
+
+      const createdWorkflow = await context.api.getWorkflow(buildResult.workflowId)
+      expect(createdWorkflow.active).toBe(false)
+      expect(createdWorkflow.nodes.map((node) => node.type)).toEqual(plan.nodes.map((node) => node.type))
+    }
   })
 
   it("blocks inspect and preview when registry ownership is missing", async () => {
