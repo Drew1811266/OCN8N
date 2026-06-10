@@ -35,7 +35,7 @@ describe("loadPluginConfig", () => {
     expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
     expect(config.previewDir).toBe("/tmp/project/.opencode/n8n-update-previews")
     expect(config.credentialEnv).toEqual({})
-    expect(config.pluginVersion).toBe("0.4.0")
+    expect(config.pluginVersion).toBe("0.5.0")
   })
 
   it("loads API config without requiring MCP URL", () => {
