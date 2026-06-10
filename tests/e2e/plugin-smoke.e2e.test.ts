@@ -83,6 +83,8 @@ describe("plugin E2E smoke", () => {
       expect(Object.keys(result.tool ?? {})).toEqual([
         "n8n_build_workflow",
         "n8n_update_workflow",
+        "n8n_claim_workflow",
+        "n8n_check_workflow_readiness",
         "n8n_inspect_workflow",
         "n8n_list_managed_workflows",
       ])
