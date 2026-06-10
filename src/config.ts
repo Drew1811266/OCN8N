@@ -236,7 +236,7 @@ function localConfigFromInput(
     credentialEnv: n8n.credentialEnv ?? {},
     defaultProjectId: n8n.projectId,
     defaultFolderId: n8n.folderId,
-    pluginVersion: input.pluginVersion ?? "0.6.0",
+    pluginVersion: input.pluginVersion ?? "0.7.0",
   }
 }
 

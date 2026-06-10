@@ -18,7 +18,7 @@ export type N8nBuilderPluginOptions = {
 }
 
 export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): Plugin {
-  const version = options.version ?? "0.6.0"
+  const version = options.version ?? "0.7.0"
 
   const plugin: Plugin = async ({ client, directory }) => {
     await client.app.log({
