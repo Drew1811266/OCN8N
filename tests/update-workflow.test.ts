@@ -7,6 +7,7 @@ import type { PluginConfig } from "../src/types.js"
 import { updateWorkflow } from "../src/tools/update-workflow.js"
 import type { N8nWorkflow } from "../src/validator.js"
 import { compileWorkflowPlan } from "../src/workflow-compiler.js"
+import type { WorkflowPlan } from "../src/workflow-plan.js"
 import { simpleWebhookPlan } from "./fixtures/workflows.js"
 
 const config: PluginConfig = {
@@ -232,6 +233,7 @@ describe("updateWorkflow", () => {
       currentWorkflowJson: JSON.stringify(currentWorkflow, null, 2),
       sdkReference: "SDK rules",
       nodeDocumentation: [{ nodeType: "selected", documentation: "Slack schema" }],
+      compatibilityGuidance: expect.stringContaining("n8n-nodes-base.slack: tier_2_modeled"),
     })
     expect(previewStore.save).toHaveBeenCalledWith({
       workflowId: "wf_1",
@@ -255,6 +257,125 @@ describe("updateWorkflow", () => {
       missingCredentials: [],
       warnings: [],
     })
+  })
+
+  it("passes node compatibility guidance to the patch planner", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => currentWorkflow),
+      updateWorkflow: vi.fn(),
+    }
+    const planner = {
+      createPatchPlan: vi.fn(async () => ({
+        summary: "Add Slack notification",
+        changes: ["Add Slack node"],
+        replacementPlan: simpleWebhookPlan,
+      })),
+    }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "Slack node: n8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "Slack schema"),
+    }
+    const previewStore = {
+      save: vi.fn(async (preview) => ({
+        previewId: "preview_1",
+        ...preview,
+      })),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await updateWorkflow({
+      args: { workflowId: "wf_1", mode: "preview", prompt: "Add Slack" },
+      config,
+      api,
+      planner,
+      mcp,
+      previewStore,
+      registry,
+      now: () => now,
+    })
+
+    expect(planner.createPatchPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        compatibilityGuidance: expect.stringContaining("n8n-nodes-base.slack: tier_2_modeled"),
+      }),
+    )
+  })
+
+  it("returns compatibility warnings for dynamic node types in preview", async () => {
+    const dynamicPlan: WorkflowPlan = {
+      name: "Dynamic workflow",
+      summary: "Uses an unverified node.",
+      nodes: [
+        {
+          key: "manual",
+          name: "Manual Trigger",
+          type: "n8n-nodes-base.manualTrigger",
+          typeVersion: 1,
+          position: [0, 0],
+          parameters: {},
+        },
+        {
+          key: "dynamic",
+          name: "Dynamic Node",
+          type: "n8n-nodes-base.unknownService",
+          typeVersion: 1,
+          position: [300, 0],
+          parameters: {},
+        },
+      ],
+      connections: [{ from: "manual", to: "dynamic" }],
+    }
+    const api = {
+      getWorkflow: vi.fn(async () => currentWorkflow),
+      updateWorkflow: vi.fn(),
+    }
+    const planner = {
+      createPatchPlan: vi.fn(async () => ({
+        summary: "Add dynamic node",
+        changes: ["Add Dynamic Node"],
+        replacementPlan: dynamicPlan,
+      })),
+    }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "n8n-nodes-base.unknownService"),
+      getNodeTypes: vi.fn(async () => "Dynamic schema"),
+    }
+    const previewStore = {
+      save: vi.fn(async (preview) => ({
+        previewId: "preview_1",
+        ...preview,
+      })),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    const result = await updateWorkflow({
+      args: { workflowId: "wf_1", mode: "preview", prompt: "Add dynamic node" },
+      config,
+      api,
+      planner,
+      mcp,
+      previewStore,
+      registry,
+      now: () => now,
+    })
+
+    expect(result.warnings).toEqual([
+      {
+        code: "NODE_COMPATIBILITY_DYNAMIC",
+        message:
+          "Node Dynamic Node uses n8n-nodes-base.unknownService, which was discovered dynamically and has no committed compatibility scenario.",
+        nodeName: "Dynamic Node",
+      },
+    ])
+    expect(previewStore.save).toHaveBeenCalled()
   })
 
   it("blocks preview updates for marker-tagged workflows missing from the registry before planning", async () => {
@@ -489,6 +610,7 @@ describe("updateWorkflow", () => {
       sdkReference: "SDK rules",
       nodeDocumentation: [{ nodeType: "selected", documentation: "Slack schema" }],
       suggestedNodes: "Use Schedule Trigger for recurring execution.",
+      compatibilityGuidance: expect.stringContaining("n8n-nodes-base.slack: tier_2_modeled"),
     })
   })
 

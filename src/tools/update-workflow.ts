@@ -2,6 +2,10 @@ import type { ApiPluginConfig } from "../config.js"
 import { N8nBuilderError } from "../errors.js"
 import { stableHash } from "../hash.js"
 import { validateWorkflowWithMcp, type McpWorkflowValidationResult } from "../mcp-workflow-validation.js"
+import {
+  analyzeWorkflowNodeCompatibility,
+  buildNodeCompatibilityGuidance,
+} from "../node-compatibility.js"
 import type { PatchPlannerContext } from "../opencode-planner.js"
 import type { SaveUpdatePreviewInput, UpdatePreview } from "../preview-store.js"
 import type { WorkflowRegistryRecord } from "../registry.js"
@@ -126,6 +130,7 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
       currentWorkflowJson: JSON.stringify(currentWorkflow, null, 2),
       sdkReference,
       nodeDocumentation,
+      compatibilityGuidance: compatibilityGuidanceForLookups(nodeTypes),
     },
     suggestedNodes,
   )
@@ -157,6 +162,7 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
   }
 
   const missingCredentials = await resolveWorkflowCredentials(proposedWorkflow, deps.credentialResolver)
+  const compatibilityWarnings = analyzeWorkflowNodeCompatibility(proposedWorkflow)
   const validateWorkflowCode = deps.mcp.validateWorkflowCode?.bind(deps.mcp)
   const mcpWarnings = validateWorkflowCode
     ? await validateWorkflowWithMcp({ mcp: { validateWorkflowCode }, workflow: proposedWorkflow })
@@ -181,7 +187,7 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     summary: patchDraft.summary,
     changes: patchDraft.changes,
     missingCredentials,
-    warnings: [...proposedValidation.warnings.map(toWarning), ...mcpWarnings],
+    warnings: [...proposedValidation.warnings.map(toWarning), ...compatibilityWarnings, ...mcpWarnings],
   }
 }
 
@@ -387,6 +393,14 @@ async function getSuggestedNodesForPrompt(
 
 function withSuggestedNodes(context: PatchPlannerContext, suggestedNodes: string | undefined): PatchPlannerContext {
   return suggestedNodes ? { ...context, suggestedNodes } : context
+}
+
+function compatibilityGuidanceForLookups(nodeTypes: NodeTypeLookup[]): string {
+  return buildNodeCompatibilityGuidance(nodeTypes.map(nodeTypeLookupToNodeType))
+}
+
+function nodeTypeLookupToNodeType(lookup: NodeTypeLookup): string {
+  return typeof lookup === "string" ? lookup : lookup.nodeId
 }
 
 function suggestedNodeCategories(prompt: string): string[] {

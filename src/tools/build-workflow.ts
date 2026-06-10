@@ -1,6 +1,10 @@
 import { N8nBuilderError } from "../errors.js"
 import { stableHash } from "../hash.js"
 import { validateWorkflowWithMcp, type McpWorkflowValidationResult } from "../mcp-workflow-validation.js"
+import {
+  analyzeWorkflowNodeCompatibility,
+  buildNodeCompatibilityGuidance,
+} from "../node-compatibility.js"
 import type { PlannerContext } from "../opencode-planner.js"
 import type { WorkflowRegistryRecord } from "../registry.js"
 import type { CredentialGap, PluginConfig, Warning } from "../types.js"
@@ -75,6 +79,7 @@ export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkf
       prompt: deps.args.prompt,
       sdkReference,
       nodeDocumentation,
+      compatibilityGuidance: compatibilityGuidanceForLookups(nodeTypes),
     },
     suggestedNodes,
   )
@@ -105,6 +110,7 @@ export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkf
   }
 
   const missingCredentials = await resolveWorkflowCredentials(workflow, deps.credentialResolver)
+  const compatibilityWarnings = analyzeWorkflowNodeCompatibility(workflow)
   const validateWorkflowCode = deps.mcp.validateWorkflowCode?.bind(deps.mcp)
   const mcpWarnings = validateWorkflowCode
     ? await validateWorkflowWithMcp({ mcp: { validateWorkflowCode }, workflow })
@@ -130,7 +136,7 @@ export async function buildWorkflow(deps: BuildWorkflowDeps): Promise<BuildWorkf
     nodeCount: workflow.nodes.length,
     summary: plan.summary,
     missingCredentials,
-    warnings: [...validation.warnings.map(toWarning), ...mcpWarnings],
+    warnings: [...validation.warnings.map(toWarning), ...compatibilityWarnings, ...mcpWarnings],
   }
 }
 
@@ -213,6 +219,14 @@ async function getSuggestedNodesForPrompt(
 
 function withSuggestedNodes(context: PlannerContext, suggestedNodes: string | undefined): PlannerContext {
   return suggestedNodes ? { ...context, suggestedNodes } : context
+}
+
+function compatibilityGuidanceForLookups(nodeTypes: NodeTypeLookup[]): string {
+  return buildNodeCompatibilityGuidance(nodeTypes.map(nodeTypeLookupToNodeType))
+}
+
+function nodeTypeLookupToNodeType(lookup: NodeTypeLookup): string {
+  return typeof lookup === "string" ? lookup : lookup.nodeId
 }
 
 function suggestedNodeCategories(prompt: string): string[] {

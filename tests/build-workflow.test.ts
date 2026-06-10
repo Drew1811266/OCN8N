@@ -140,6 +140,7 @@ describe("buildWorkflow", () => {
       prompt: "Build an order webhook",
       sdkReference: "SDK rules",
       nodeDocumentation: [{ nodeType: "selected", documentation: "node schemas" }],
+      compatibilityGuidance: expect.stringContaining("n8n-nodes-base.webhook: tier_1_verified"),
     })
     expect(api.createWorkflow).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -172,6 +173,95 @@ describe("buildWorkflow", () => {
       missingCredentials: [],
       warnings: [],
     })
+  })
+
+  it("passes node compatibility guidance to the planner", async () => {
+    const api = {
+      createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
+    }
+    const registry = { upsert: vi.fn(async () => undefined) }
+    const planner = { createPlan: vi.fn(async () => simpleWebhookPlan) }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "n8n-nodes-base.webhook\nn8n-nodes-base.slack"),
+      getNodeTypes: vi.fn(async () => "node schemas"),
+    }
+
+    await buildWorkflow({
+      args: { prompt: "Build an order webhook" },
+      config,
+      api,
+      registry,
+      planner,
+      mcp,
+      now: () => new Date("2026-06-04T00:00:00.000Z"),
+    })
+
+    expect(planner.createPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        compatibilityGuidance: expect.stringContaining("n8n-nodes-base.webhook: tier_1_verified"),
+      }),
+    )
+    expect(planner.createPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        compatibilityGuidance: expect.stringContaining("n8n-nodes-base.slack: tier_2_modeled"),
+      }),
+    )
+  })
+
+  it("returns compatibility warnings for dynamic node types", async () => {
+    const dynamicPlan: WorkflowPlan = {
+      name: "Dynamic workflow",
+      summary: "Uses an unverified node.",
+      nodes: [
+        {
+          key: "manual",
+          name: "Manual Trigger",
+          type: "n8n-nodes-base.manualTrigger",
+          typeVersion: 1,
+          position: [0, 0],
+          parameters: {},
+        },
+        {
+          key: "dynamic",
+          name: "Dynamic Node",
+          type: "n8n-nodes-base.unknownService",
+          typeVersion: 1,
+          position: [300, 0],
+          parameters: {},
+        },
+      ],
+      connections: [{ from: "manual", to: "dynamic" }],
+    }
+    const api = {
+      createWorkflow: vi.fn(async (workflow) => ({ ...workflow, id: "wf_1" })),
+    }
+    const registry = { upsert: vi.fn(async () => undefined) }
+    const planner = { createPlan: vi.fn(async () => dynamicPlan) }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "n8n-nodes-base.unknownService"),
+      getNodeTypes: vi.fn(async () => "node schemas"),
+    }
+
+    const result = await buildWorkflow({
+      args: { prompt: "Build with a special service" },
+      config,
+      api,
+      registry,
+      planner,
+      mcp,
+      now: () => new Date("2026-06-04T00:00:00.000Z"),
+    })
+
+    expect(result.warnings).toEqual([
+      {
+        code: "NODE_COMPATIBILITY_DYNAMIC",
+        message:
+          "Node Dynamic Node uses n8n-nodes-base.unknownService, which was discovered dynamically and has no committed compatibility scenario.",
+        nodeName: "Dynamic Node",
+      },
+    ])
   })
 
   it("resolves existing credential references before creating the workflow", async () => {
@@ -409,6 +499,7 @@ describe("buildWorkflow", () => {
       sdkReference: "SDK rules",
       nodeDocumentation: [{ nodeType: "selected", documentation: "Slack schema" }],
       suggestedNodes: "Use Schedule Trigger for recurring execution.",
+      compatibilityGuidance: expect.stringContaining("n8n-nodes-base.slack: tier_2_modeled"),
     })
   })
 
@@ -439,6 +530,7 @@ describe("buildWorkflow", () => {
       prompt: "Build an order webhook",
       sdkReference: "SDK rules",
       nodeDocumentation: [],
+      compatibilityGuidance: expect.stringContaining("No specific node types were extracted"),
     })
   })
 })
