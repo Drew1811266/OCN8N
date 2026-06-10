@@ -884,6 +884,72 @@ describe("updateWorkflow", () => {
     expect(api.updateWorkflow).not.toHaveBeenCalled()
   })
 
+  it("blocks rollback when the preview is missing or invalid", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
+      updateWorkflow: vi.fn(),
+    }
+    const previewStore = {
+      get: vi.fn(async () => undefined),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await expect(
+      updateWorkflow({
+        args: { workflowId: "wf_1", mode: "rollback-preview", previewId: "preview_1" },
+        config,
+        api,
+        previewStore,
+        registry,
+        now: () => new Date("2026-06-04T00:10:00.000Z"),
+      }),
+    ).rejects.toMatchObject({
+      code: "UPDATE_PREVIEW_INVALID",
+    } satisfies Partial<N8nBuilderError>)
+    expect(api.getWorkflow).not.toHaveBeenCalled()
+    expect(api.updateWorkflow).not.toHaveBeenCalled()
+  })
+
+  it("blocks rollback when the workflow is missing from the local registry", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
+      updateWorkflow: vi.fn(),
+    }
+    const previewStore = {
+      get: vi.fn(async () => previewRecord()),
+    }
+    const registry = {
+      get: vi.fn(async () => undefined),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await expect(
+      updateWorkflow({
+        args: { workflowId: "wf_1", mode: "rollback-preview", previewId: "preview_1" },
+        config,
+        api,
+        previewStore,
+        registry,
+        now: () => new Date("2026-06-04T00:10:00.000Z"),
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKFLOW_UPDATE_BLOCKED",
+      details: {
+        workflowId: "wf_1",
+        issues: [
+          expect.objectContaining({
+            code: "WORKFLOW_NOT_IN_REGISTRY",
+          }),
+        ],
+      },
+    } satisfies Partial<N8nBuilderError>)
+    expect(api.updateWorkflow).not.toHaveBeenCalled()
+    expect(registry.upsert).not.toHaveBeenCalled()
+  })
+
   it("blocks apply updates when a valid preview targets a workflow missing from the registry", async () => {
     const api = {
       getWorkflow: vi.fn(async () => currentWorkflow),

@@ -683,7 +683,7 @@ v0.7.0 opt-in E2E 覆盖：
 v0.7.0 最近一次本地验证结果（不含 Docker E2E）：
 
 - TypeScript：`./node_modules/.bin/tsc --noEmit` 通过。
-- Vitest：`./node_modules/.bin/vitest run` 通过，20 个测试文件，212 个测试通过。
+- Vitest：`./node_modules/.bin/vitest run` 通过，20 个测试文件，214 个测试通过。
 - 当前环境没有 Docker CLI，`env -u N8N_E2E_API_KEY node scripts/run-e2e.mjs` 返回 `spawn docker ENOENT` 诊断；有 Docker 和本地测试 API Key 时再运行 `N8N_E2E_API_KEY=<你的测试 API Key> npm run test:e2e` 做完整 E2E。
 
 ## 当前版本状态
