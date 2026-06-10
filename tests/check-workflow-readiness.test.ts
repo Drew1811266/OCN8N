@@ -166,4 +166,102 @@ describe("checkWorkflowReadiness", () => {
       message: "Recent executions are unavailable from the configured n8n API or API key scope.",
     })
   })
+
+  it("activates only with explicit confirmation and no blocking checks", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () =>
+        workflow({
+          nodes: [
+            {
+              name: "Start",
+              type: "n8n-nodes-base.manualTrigger",
+              typeVersion: 1,
+              position: [0, 0],
+              parameters: {},
+            },
+          ],
+          connections: {},
+        }),
+      ),
+      listExecutions: vi.fn(async () => []),
+      activateWorkflow: vi.fn(async () => workflow({ active: true })),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+    const mcp = {
+      validateWorkflowCode: vi.fn(async () => ({ valid: true, errors: [], warnings: [], nodeCount: 1 })),
+    }
+
+    const result = await checkWorkflowReadiness({
+      args: { workflowId: "wf_1", mode: "activate", confirm: true, allowWarnings: true },
+      config: { baseUrl, pluginVersion: "0.8.0" },
+      api,
+      registry,
+      mcp,
+      now: () => now,
+    })
+
+    expect(api.activateWorkflow).toHaveBeenCalledWith("wf_1")
+    expect(registry.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflowId: "wf_1",
+        name: "Orders",
+        lastUpdatedAt: now.toISOString(),
+      }),
+    )
+    expect(result.mode).toBe("activate")
+    expect(result.active).toBe(true)
+  })
+
+  it("rejects activation without confirmation", async () => {
+    const api = {
+      getWorkflow: vi.fn(async () => workflow()),
+      listExecutions: vi.fn(async () => []),
+      activateWorkflow: vi.fn(),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    await expect(
+      checkWorkflowReadiness({
+        args: { workflowId: "wf_1", mode: "activate", confirm: false },
+        config: { baseUrl, pluginVersion: "0.8.0" },
+        api,
+        registry,
+        now: () => now,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKFLOW_ACTIVATION_CONFIRMATION_REQUIRED",
+    } satisfies Partial<N8nBuilderError>)
+    expect(api.activateWorkflow).not.toHaveBeenCalled()
+  })
+
+  it("deactivates managed workflows with explicit confirmation", async () => {
+    const activeWorkflow = workflow({ active: true })
+    const api = {
+      getWorkflow: vi.fn(async () => activeWorkflow),
+      listExecutions: vi.fn(async () => []),
+      deactivateWorkflow: vi.fn(async () => workflow({ active: false })),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    const result = await checkWorkflowReadiness({
+      args: { workflowId: "wf_1", mode: "deactivate", confirm: true },
+      config: { baseUrl, pluginVersion: "0.8.0" },
+      api,
+      registry,
+      now: () => now,
+    })
+
+    expect(api.deactivateWorkflow).toHaveBeenCalledWith("wf_1")
+    expect(result.mode).toBe("deactivate")
+    expect(result.active).toBe(false)
+  })
 })

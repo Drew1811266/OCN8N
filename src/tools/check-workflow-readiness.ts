@@ -1,4 +1,5 @@
 import { N8nBuilderError } from "../errors.js"
+import { stableHash } from "../hash.js"
 import { validateWorkflowWithMcp, type McpWorkflowValidationResult } from "../mcp-workflow-validation.js"
 import type { N8nExecutionSummary } from "../n8n-api-client.js"
 import { analyzeWorkflowNodeCompatibility } from "../node-compatibility.js"
@@ -6,6 +7,8 @@ import type { WorkflowRegistryRecord } from "../registry.js"
 import { redactSecrets } from "../security.js"
 import type { Warning } from "../types.js"
 import { validateWorkflowForSave, type N8nWorkflow, type WorkflowIssue } from "../validator.js"
+
+const managedBy = "opencode-n8n-builder" as const
 
 export type CheckWorkflowReadinessArgs =
   | { workflowId: string; mode: "preview"; confirm?: never; allowWarnings?: boolean }
@@ -96,7 +99,7 @@ export async function checkWorkflowReadiness(
   const diagnostics = await runtimeDiagnostics(workflow.id, deps.api)
   const status = readinessStatus(checks)
 
-  return {
+  const previewResult = {
     workflowId: workflow.id,
     name: workflow.name,
     mode: deps.args.mode,
@@ -109,7 +112,81 @@ export async function checkWorkflowReadiness(
       allowed: status === "ready",
       requiresConfirmation: true,
     },
+  } satisfies CheckWorkflowReadinessResult
+
+  if (deps.args.mode === "preview") return previewResult
+
+  if (!deps.args.confirm) {
+    throw new N8nBuilderError(`${deps.args.mode} requires confirm: true.`, "WORKFLOW_ACTIVATION_CONFIRMATION_REQUIRED", {
+      field: "confirm",
+    })
   }
+
+  if (deps.args.mode === "activate") {
+    if (!deps.api.activateWorkflow) {
+      throw new N8nBuilderError("Activation API dependency is not configured.", "WORKFLOW_ACTIVATION_UNSUPPORTED")
+    }
+    if (status === "blocked" || (status === "warning" && !deps.args.allowWarnings)) {
+      throw new N8nBuilderError("Workflow readiness checks did not pass for activation.", "WORKFLOW_ACTIVATION_BLOCKED", {
+        checks,
+      })
+    }
+
+    const activated = await deps.api.activateWorkflow(deps.args.workflowId)
+    await upsertRegistryFromWorkflow(
+      deps.registry,
+      activated,
+      deps.config.baseUrl,
+      deps.config.pluginVersion,
+      deps.now?.() ?? new Date(),
+    )
+    return {
+      ...previewResult,
+      active: activated.active,
+      mode: "activate",
+    }
+  }
+
+  if (!deps.api.deactivateWorkflow) {
+    throw new N8nBuilderError("Deactivation API dependency is not configured.", "WORKFLOW_ACTIVATION_UNSUPPORTED")
+  }
+  const deactivated = await deps.api.deactivateWorkflow(deps.args.workflowId)
+  await upsertRegistryFromWorkflow(
+    deps.registry,
+    deactivated,
+    deps.config.baseUrl,
+    deps.config.pluginVersion,
+    deps.now?.() ?? new Date(),
+  )
+  return {
+    ...previewResult,
+    active: deactivated.active,
+    mode: "deactivate",
+  }
+}
+
+async function upsertRegistryFromWorkflow(
+  registry: { upsert(record: WorkflowRegistryRecord): Promise<void> },
+  workflow: N8nWorkflow & { id: string },
+  baseUrl: string,
+  pluginVersion: string,
+  now: Date,
+): Promise<void> {
+  await registry.upsert({
+    workflowId: workflow.id,
+    name: workflow.name,
+    url: workflowUrl(baseUrl, workflow.id),
+    baseUrl,
+    managedBy,
+    managedByVersion: pluginVersion,
+    lastPlanHash: stableHash(workflow),
+    lastUpdatedAt: now.toISOString(),
+  })
+}
+
+function workflowUrl(baseUrl: string, workflowId: string): string {
+  const appBaseUrl = baseUrl.replace(/\/api\/v\d+\/?$/i, "").replace(/\/+$/, "")
+  return `${appBaseUrl}/workflow/${encodeURIComponent(workflowId)}`
 }
 
 async function requireRegistryOwnership(
