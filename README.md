@@ -2,9 +2,19 @@
 
 `opencode-n8n-builder` 是一个用于连接 OpenCode 和 n8n 的插件。它允许用户用自然语言描述自动化需求，由 OpenCode 结合 n8n 官方 MCP 节点文档生成、检查并安全更新 n8n workflow 草稿。
 
-当前版本：`0.8.0`
+当前版本：`0.9.0`
 
-当前状态：`v0.8` 版本。核心的“托管 workflow”生命周期继续保持保守安全边界：结构性 update 仍只允许 inactive workflow；新增 `n8n_check_workflow_readiness` 用于生产就绪检查、最近执行诊断，以及需要显式 `confirm: true` 的托管 workflow 激活/停用。
+当前状态：`v0.9` 版本。运行时工具能力保持 v0.8 的安全边界；本版本重点是发布可用性：补齐安装、配置、credential、运营、排障和 release checklist 文档，加入 parseable OpenCode config 示例，并准备 package metadata、package boundary check 和 CI。
+
+## 文档索引
+
+- [安装指南](docs/installation.md)
+- [配置指南](docs/configuration.md)
+- [Credential Setup](docs/credential-setup.md)
+- [Operations Guide](docs/operations.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Release Checklist](docs/release-checklist.md)
+- [CHANGELOG](CHANGELOG.md)
 
 ## 项目目标
 
@@ -130,6 +140,17 @@ v0.7 仍不提供可视化 canvas diff，不浏览任意历史版本，不对未
 - n8n API client 新增 public API wrapper：`activateWorkflow`、`deactivateWorkflow` 和 `listExecutions`。
 
 v0.8 仍不允许 `n8n_update_workflow` 修改 active workflow，不自动触发 workflow run，不自动修复 readiness warning，也不把未托管 workflow 纳入激活/停用范围。
+
+## v0.9.0 新增能力
+
+- 补齐面向新技术用户的文档：安装、配置、credential setup、运营工具说明、排障和 release checklist。
+- 新增 `examples/`，提供 local n8n、n8n Cloud、MCP token 和 credential env mapping 的 parseable OpenCode config 示例。
+- 新增 `CHANGELOG.md`，记录 v0.1.0 到 v0.9.0 的版本变化。
+- package metadata 增加 repository、bugs、homepage、Node engine、扩展 package files 和 `package:check`。
+- 新增 Node-only package boundary check，用于确认 build 后 package 必需文件和 export entrypoint 存在。
+- 为 v0.9 release readiness 增加 docs/package metadata 测试，为后续 CI 和 v1.0 release candidate 打基础。
+
+v0.9 仍不发布 npm 包、不创建 release tag、不改变 runtime tool contract，也不新增 active workflow 结构编辑能力。
 
 ## 当前暂不支持
 
@@ -715,7 +736,7 @@ N8N_E2E_KEEP_ALIVE=1 N8N_E2E_API_KEY=<你的测试 API Key> npm run test:e2e
 
 ## 测试覆盖
 
-v0.8.0 默认测试覆盖：
+v0.9.0 默认测试覆盖：
 
 - OpenCode 插件注册和工具 wiring。
 - 配置从环境变量和 OpenCode config 中加载。
@@ -742,6 +763,7 @@ v0.8.0 默认测试覆盖：
 - n8n API activation/deactivation endpoint wrapper、execution list parsing 和 malformed response 处理。
 - readiness preview 的托管校验、MCP validation check、webhook/schedule activation warning 和 runtime diagnostics fallback。
 - readiness activate/deactivate 的 `confirm` 门禁、warning 放行、blocking check 阻断和 registry 刷新。
+- package metadata、version sync、docs handoff、example config JSON 和 changelog 覆盖。
 - registry 和 preview store 持久化，包括 update preview 的 `baseWorkflow`、`proposedWorkflow` 和 `diff` 结构校验。
 - build workflow 编排。
 - update preview/apply 安全边界、结构化 diff 返回和 rollback preview/apply/stale 阻断。
@@ -749,7 +771,7 @@ v0.8.0 默认测试覆盖：
 - inspect/list 安全边界。
 - v0.4 低风险场景 fixture：webhook transform response、schedule/http/if/set、webhook branch merge、API polling notice。
 
-v0.8.0 opt-in E2E 覆盖：
+v0.9.0 opt-in E2E 覆盖：
 
 - Docker runner 的 Docker/Compose 诊断、n8n readiness、API Key bootstrap 提示、环境变量映射和 cleanup 参数。
 - 真实 n8n API lifecycle：创建、读取、更新和清理测试 workflow。
@@ -759,8 +781,9 @@ v0.8.0 opt-in E2E 覆盖：
 - v0.6 claim/import 场景：创建外部 inactive workflow -> claim preview -> claim apply -> inspect -> update preview。
 - v0.7 尚未新增 Docker E2E rollback 场景；rollback 当前由默认单元测试覆盖。
 - v0.8 尚未新增 Docker E2E activation/deactivation 场景；readiness 和 activation 当前由默认单元测试覆盖。
+- v0.9 主要是 packaging/docs/CI readiness；未新增 Docker E2E runtime 场景。
 
-v0.8.0 最近一次本地验证结果（不含 Docker E2E）：
+v0.9.0 最近一次本地验证结果（不含 Docker E2E）：
 
 - TypeScript：`./node_modules/.bin/tsc --noEmit` 通过。
 - Vitest：`./node_modules/.bin/vitest run` 通过，21 个测试文件，224 个测试通过。
@@ -768,10 +791,14 @@ v0.8.0 最近一次本地验证结果（不含 Docker E2E）：
 
 ## 当前版本状态
 
-`0.8.0` 是 production readiness 和显式 activation 里程碑：
+`0.9.0` 是 release readiness 和 handoff documentation 里程碑：
 
 - 插件运行时已接入 OpenCode。
 - build/update/claim/readiness/inspect/list 六个工具已实现。
+- 安装、配置、credential setup、operations、troubleshooting 和 release checklist 文档已加入 `docs/`。
+- local n8n、n8n Cloud、MCP token 和 credential mapping 示例已加入 `examples/`。
+- package metadata、package files 和 package boundary check 已准备好，方便后续 `npm pack --dry-run` 审查。
+- `CHANGELOG.md` 记录 v0.1.0 到 v0.9.0 的版本变化。
 - workflow ownership 和 active workflow 安全限制已实现。
 - `n8n_claim_workflow` 支持只读 preview 和需要 `confirm: true` 的 apply。
 - 未托管 inactive workflow 可以被显式接管，已带本插件 marker 但缺 registry 的 workflow 可以修复 registry。
