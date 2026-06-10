@@ -194,6 +194,71 @@ describe("loadPluginConfig", () => {
     expect(config.credentialEnv.slackApi.env.accessToken).toBe("SLACK_BOT_TOKEN")
   })
 
+  it("loads credential setup metadata from OpenCode config", () => {
+    const config = loadPluginConfig({
+      env: requiredEnv,
+      workspaceDir: "/tmp/project",
+      opencodeConfig: {
+        n8n: {
+          credentialEnv: {
+            slackApi: {
+              name: "OpenCode Slack",
+              type: "slackApi",
+              env: { accessToken: "SLACK_BOT_TOKEN" },
+              authMode: "api_key",
+              setupUrl: "https://docs.n8n.io/integrations/builtin/credentials/slack/",
+              docs: ["Slack app token with chat:write scope"],
+            },
+            gmailOAuth2: {
+              name: "OpenCode Gmail",
+              type: "gmailOAuth2",
+              env: {},
+              authMode: "oauth2",
+              docs: ["Complete OAuth in n8n UI."],
+            },
+          },
+        },
+      },
+    })
+
+    expect(config.credentialEnv.slackApi).toEqual({
+      name: "OpenCode Slack",
+      type: "slackApi",
+      env: { accessToken: "SLACK_BOT_TOKEN" },
+      authMode: "api_key",
+      setupUrl: "https://docs.n8n.io/integrations/builtin/credentials/slack/",
+      docs: ["Slack app token with chat:write scope"],
+    })
+    expect(config.credentialEnv.gmailOAuth2).toEqual({
+      name: "OpenCode Gmail",
+      type: "gmailOAuth2",
+      env: {},
+      authMode: "oauth2",
+      docs: ["Complete OAuth in n8n UI."],
+    })
+  })
+
+  it("rejects invalid credential authMode values", () => {
+    expect(() =>
+      loadPluginConfig({
+        env: requiredEnv,
+        workspaceDir: "/tmp/project",
+        opencodeConfig: {
+          n8n: {
+            credentialEnv: {
+              slackApi: {
+                name: "OpenCode Slack",
+                type: "slackApi",
+                env: {},
+                authMode: "passwordless",
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow("Invalid n8n configuration: n8n.credentialEnv.slackApi.authMode must be one of api_key, oauth2, manual.")
+  })
+
   it("throws a typed config error when required settings are missing", () => {
     expect(() =>
       loadPluginConfig({

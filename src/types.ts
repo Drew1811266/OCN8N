@@ -1,9 +1,35 @@
 export type Env = Record<string, string | undefined>
 
+export type CredentialAuthMode = "api_key" | "oauth2" | "manual"
+
 export type CredentialEnvMapping = {
   name: string
   type: string
   env: Record<string, string>
+  authMode?: CredentialAuthMode
+  setupUrl?: string
+  docs?: string[]
+}
+
+export type CredentialActionStatus = "resolved" | "required"
+
+export type CredentialActionType =
+  | "reuse_existing"
+  | "create_from_env"
+  | "set_missing_env"
+  | "configure_mapping"
+  | "complete_oauth_in_n8n"
+
+export type CredentialSetupAction = {
+  nodeName: string
+  credentialType: string
+  credentialName?: string
+  action: CredentialActionType
+  status: CredentialActionStatus
+  message: string
+  requiredEnv?: string[]
+  manualSetupUrl?: string
+  docs?: string[]
 }
 
 export type PluginConfig = {

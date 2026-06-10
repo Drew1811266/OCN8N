@@ -1,6 +1,6 @@
 import path from "node:path"
 import { N8nBuilderError } from "./errors.js"
-import type { CredentialEnvMapping, Env, PluginConfig } from "./types.js"
+import type { CredentialAuthMode, CredentialEnvMapping, Env, PluginConfig } from "./types.js"
 
 export type LoadPluginConfigInput = {
   env: Env
@@ -36,6 +36,7 @@ export type LocalPluginConfig = Pick<
 export type ApiPluginConfig = Omit<PluginConfig, "mcpUrl" | "mcpToken">
 
 const optionalStringFields = ["baseUrl", "apiKey", "mcpUrl", "mcpToken", "projectId", "folderId"] as const
+const credentialAuthModes = new Set(["api_key", "oauth2", "manual"])
 
 function isPlainObject(value: unknown): value is PlainRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
@@ -88,11 +89,45 @@ function readCredentialEnvMapping(id: string, value: unknown): CredentialEnvMapp
     env[envField] = envValue
   }
 
+  const authMode = readCredentialAuthMode(`${field}.authMode`, value.authMode)
+  const setupUrl = readOptionalCredentialString(`${field}.setupUrl`, value.setupUrl)
+  const docs = readOptionalStringArray(`${field}.docs`, value.docs)
+
   return {
     name: value.name,
     type: value.type,
     env,
+    ...(authMode ? { authMode } : {}),
+    ...(setupUrl ? { setupUrl } : {}),
+    ...(docs ? { docs } : {}),
   }
+}
+
+function readCredentialAuthMode(field: string, value: unknown): CredentialAuthMode | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== "string" || !credentialAuthModes.has(value)) {
+    throwInvalidConfig(field, "must be one of api_key, oauth2, manual")
+  }
+
+  return value as CredentialAuthMode
+}
+
+function readOptionalCredentialString(field: string, value: unknown): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== "string") {
+    throwInvalidConfig(field, "must be a string")
+  }
+
+  return value
+}
+
+function readOptionalStringArray(field: string, value: unknown): string[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    throwInvalidConfig(field, "must be an array of strings")
+  }
+
+  return value
 }
 
 function readCredentialEnv(value: unknown): Record<string, CredentialEnvMapping> {
