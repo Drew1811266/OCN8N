@@ -42,12 +42,27 @@ function previewEnvelope(overrides: Record<string, unknown> = {}): Record<string
     proposedWorkflowHash: "proposed",
     summary: "Add Slack node",
     changes: ["Add Slack node"],
+    baseWorkflow: {
+      name: simpleWebhookPlan.name,
+      active: false,
+      nodes: [],
+      connections: {},
+      settings: {},
+    },
     proposedWorkflow: {
       name: simpleWebhookPlan.name,
       active: false,
       nodes: [],
       connections: {},
       settings: {},
+    },
+    diff: {
+      addedNodes: [],
+      removedNodes: [],
+      changedNodeParameters: [],
+      changedCredentials: [],
+      changedConnections: [],
+      changedSettings: [],
     },
     createdAt: "2026-06-04T00:00:00.000Z",
     expiresAt: "2026-06-04T00:30:00.000Z",
@@ -125,7 +140,16 @@ describe("PreviewStore", () => {
       proposedWorkflowHash: "proposed",
       summary: "Add Slack node",
       changes: ["Add Slack node"],
+      baseWorkflow: proposedWorkflow,
       proposedWorkflow,
+      diff: {
+        addedNodes: [],
+        removedNodes: [],
+        changedNodeParameters: [],
+        changedCredentials: [],
+        changedConnections: [],
+        changedSettings: [],
+      },
       createdAt: "2026-06-04T00:00:00.000Z",
       expiresAt: "2026-06-04T00:30:00.000Z",
     })
@@ -142,7 +166,16 @@ describe("PreviewStore", () => {
       "utf8",
     )
     expect(raw.endsWith("\n")).toBe(true)
+    expect(JSON.parse(raw).baseWorkflow).toEqual(proposedWorkflow)
     expect(JSON.parse(raw).proposedWorkflow).toEqual(proposedWorkflow)
+    expect(JSON.parse(raw).diff).toEqual({
+      addedNodes: [],
+      removedNodes: [],
+      changedNodeParameters: [],
+      changedCredentials: [],
+      changedConnections: [],
+      changedSettings: [],
+    })
   })
 
   it("returns undefined for traversal-like preview IDs without throwing", async () => {
@@ -321,6 +354,32 @@ describe("PreviewStore", () => {
     expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
   })
 
+  it("returns undefined when preview diff is malformed", async () => {
+    const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
+    const store = new PreviewStore(previewDir)
+    const validUuid = "123e4567-e89b-12d3-a456-426614174000"
+
+    await mkdir(previewDir, { recursive: true })
+    await writeFile(
+      path.join(previewDir, `${validUuid}.json`),
+      JSON.stringify(
+        previewEnvelope({
+          diff: {
+            addedNodes: [null],
+            removedNodes: [],
+            changedNodeParameters: [],
+            changedCredentials: [],
+            changedConnections: [],
+            changedSettings: [],
+          },
+        }),
+      ),
+      "utf8",
+    )
+
+    expect(await store.get(validUuid, new Date("2026-06-04T00:10:00.000Z"))).toBeUndefined()
+  })
+
   it("returns undefined when preview workflow id is malformed", async () => {
     const previewDir = path.join(dir, ".opencode", "n8n-update-previews")
     const store = new PreviewStore(previewDir)
@@ -451,12 +510,27 @@ describe("PreviewStore", () => {
       proposedWorkflowHash: "proposed",
       summary: "Add Slack node",
       changes: ["Add Slack node"],
+      baseWorkflow: {
+        name: simpleWebhookPlan.name,
+        active: false,
+        nodes: [],
+        connections: {},
+        settings: {},
+      },
       proposedWorkflow: {
         name: simpleWebhookPlan.name,
         active: false,
         nodes: [],
         connections: {},
         settings: {},
+      },
+      diff: {
+        addedNodes: [],
+        removedNodes: [],
+        changedNodeParameters: [],
+        changedCredentials: [],
+        changedConnections: [],
+        changedSettings: [],
       },
       createdAt: "2026-06-04T00:00:00.000Z",
       expiresAt: "2026-06-04T00:30:00.000Z",

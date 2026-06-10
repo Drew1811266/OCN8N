@@ -7,6 +7,7 @@ import type { PluginConfig } from "../src/types.js"
 import { updateWorkflow } from "../src/tools/update-workflow.js"
 import type { N8nWorkflow } from "../src/validator.js"
 import { compileWorkflowPlan } from "../src/workflow-compiler.js"
+import { createWorkflowDiff } from "../src/workflow-diff.js"
 import { workflowPlanSchema, type WorkflowPlan } from "../src/workflow-plan.js"
 import { simpleWebhookPlan } from "./fixtures/workflows.js"
 
@@ -65,6 +66,23 @@ const otherBaseUrlRegistryRecord: WorkflowRegistryRecord = {
   ...registryRecord,
   url: "https://other-demo/workflow/wf_1",
   baseUrl: "https://other-demo/api/v1",
+}
+
+function previewRecord(overrides: Partial<UpdatePreview> = {}): UpdatePreview {
+  return {
+    previewId: "preview_1",
+    workflowId: "wf_1",
+    baseWorkflowHash: stableHash(currentWorkflow),
+    proposedWorkflowHash: stableHash(proposedWorkflow),
+    summary: "Apply Slack",
+    changes: ["Add Slack node"],
+    baseWorkflow: currentWorkflow,
+    proposedWorkflow,
+    diff: createWorkflowDiff(currentWorkflow, proposedWorkflow),
+    createdAt: "2026-06-04T00:00:00.000Z",
+    expiresAt: "2026-06-04T00:30:00.000Z",
+    ...overrides,
+  }
 }
 
 describe("updateWorkflow", () => {
@@ -241,7 +259,9 @@ describe("updateWorkflow", () => {
       proposedWorkflowHash: stableHash(proposedWorkflow),
       summary: "Add Slack notification",
       changes: ["Add Slack node"],
+      baseWorkflow: currentWorkflow,
       proposedWorkflow,
+      diff: createWorkflowDiff(currentWorkflow, proposedWorkflow),
       createdAt: "2026-06-04T00:00:00.000Z",
       expiresAt: "2026-06-04T00:30:00.000Z",
     })
@@ -254,10 +274,89 @@ describe("updateWorkflow", () => {
       previewId: "preview_1",
       summary: "Add Slack notification",
       changes: ["Add Slack node"],
+      diff: createWorkflowDiff(currentWorkflow, proposedWorkflow),
       missingCredentials: [],
       credentialActions: [],
       warnings: [],
     })
+  })
+
+  it("returns redacted structured diff for update previews", async () => {
+    const currentSecretWorkflow: N8nWorkflow & { id: string } = {
+      ...currentWorkflow,
+      nodes: [
+        {
+          name: "HTTP",
+          type: "n8n-nodes-base.httpRequest",
+          typeVersion: 4,
+          position: [0, 0],
+          parameters: { headerValue: "Bearer old-secret" },
+        },
+      ],
+    }
+    const secretPlan: WorkflowPlan = workflowPlanSchema.parse({
+      name: "Orders",
+      summary: "Update HTTP header.",
+      nodes: [
+        {
+          key: "http",
+          name: "HTTP",
+          type: "n8n-nodes-base.httpRequest",
+          typeVersion: 4,
+          position: [0, 0],
+          parameters: { headerValue: "Bearer new-secret" },
+        },
+      ],
+      connections: [],
+    })
+    const api = {
+      getWorkflow: vi.fn(async () => currentSecretWorkflow),
+      updateWorkflow: vi.fn(),
+    }
+    const planner = {
+      createPatchPlan: vi.fn(async () => ({
+        summary: "Update HTTP header.",
+        changes: ["Update HTTP token header"],
+        replacementPlan: secretPlan,
+      })),
+    }
+    const mcp = {
+      getSdkReference: vi.fn(async () => "SDK rules"),
+      searchNodes: vi.fn(async () => "n8n-nodes-base.httpRequest"),
+      getNodeTypes: vi.fn(async () => "HTTP schema"),
+    }
+    const previewStore = {
+      save: vi.fn(async (preview) => ({
+        previewId: "preview_1",
+        ...preview,
+      })),
+    }
+    const registry = {
+      get: vi.fn(async () => registryRecord),
+      upsert: vi.fn(async () => undefined),
+    }
+
+    const result = await updateWorkflow({
+      args: { workflowId: "wf_1", mode: "preview", prompt: "Update HTTP token" },
+      config,
+      api,
+      planner,
+      mcp,
+      previewStore,
+      registry,
+      now: () => now,
+    })
+
+    expect(result.diff?.changedNodeParameters).toEqual([
+      {
+        nodeName: "HTTP",
+        path: "headerValue",
+        before: "[REDACTED]",
+        after: "[REDACTED]",
+      },
+    ])
+    expect(JSON.stringify(result.diff)).not.toContain("old-secret")
+    expect(JSON.stringify(result.diff)).not.toContain("new-secret")
   })
 
   it("passes node compatibility guidance to the patch planner", async () => {
@@ -639,17 +738,7 @@ describe("updateWorkflow", () => {
       updateWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
     }
     const previewStore = {
-      get: vi.fn(async () => ({
-        previewId: "preview_1",
-        workflowId: "wf_1",
-        baseWorkflowHash: stableHash(currentWorkflow),
-        proposedWorkflowHash: stableHash(proposedWorkflow),
-        summary: "Apply Slack",
-        changes: ["Add Slack node"],
-        proposedWorkflow,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        expiresAt: "2026-06-04T00:30:00.000Z",
-      })),
+      get: vi.fn(async () => previewRecord()),
     }
     const registry = {
       get: vi.fn(async () => registryRecord),
@@ -698,17 +787,7 @@ describe("updateWorkflow", () => {
       updateWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
     }
     const previewStore = {
-      get: vi.fn(async () => ({
-        previewId: "preview_1",
-        workflowId: "wf_1",
-        baseWorkflowHash: stableHash(currentWorkflow),
-        proposedWorkflowHash: stableHash(proposedWorkflow),
-        summary: "Apply Slack",
-        changes: ["Add Slack node"],
-        proposedWorkflow,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        expiresAt: "2026-06-04T00:30:00.000Z",
-      })),
+      get: vi.fn(async () => previewRecord()),
     }
     const registry = {
       get: vi.fn(async () => undefined),
@@ -746,17 +825,7 @@ describe("updateWorkflow", () => {
       updateWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
     }
     const previewStore = {
-      get: vi.fn(async () => ({
-        previewId: "preview_1",
-        workflowId: "wf_1",
-        baseWorkflowHash: stableHash(currentWorkflow),
-        proposedWorkflowHash: stableHash(proposedWorkflow),
-        summary: "Apply Slack",
-        changes: ["Add Slack node"],
-        proposedWorkflow,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        expiresAt: "2026-06-04T00:30:00.000Z",
-      })),
+      get: vi.fn(async () => previewRecord()),
     }
     const registry = {
       get: vi.fn(async () => otherBaseUrlRegistryRecord),
@@ -798,17 +867,13 @@ describe("updateWorkflow", () => {
       updateWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
     }
     const previewStore = {
-      get: vi.fn(async () => ({
-        previewId: "preview_1",
-        workflowId: "wf_1",
-        baseWorkflowHash: stableHash(activeCurrentWorkflow),
-        proposedWorkflowHash: stableHash(proposedWorkflow),
-        summary: "Apply Slack",
-        changes: ["Add Slack node"],
-        proposedWorkflow,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        expiresAt: "2026-06-04T00:30:00.000Z",
-      })),
+      get: vi.fn(async () =>
+        previewRecord({
+          baseWorkflow: activeCurrentWorkflow,
+          baseWorkflowHash: stableHash(activeCurrentWorkflow),
+          diff: createWorkflowDiff(activeCurrentWorkflow, proposedWorkflow),
+        }),
+      ),
     }
     const registry = {
       get: vi.fn(async () => registryRecord),
@@ -848,17 +913,13 @@ describe("updateWorkflow", () => {
       updateWorkflow: vi.fn(async () => ({ ...proposedWorkflow, id: "wf_1" })),
     }
     const previewStore = {
-      get: vi.fn(async () => ({
-        previewId: "preview_1",
-        workflowId: "wf_1",
-        baseWorkflowHash: stableHash(unmanagedCurrentWorkflow),
-        proposedWorkflowHash: stableHash(proposedWorkflow),
-        summary: "Apply Slack",
-        changes: ["Add Slack node"],
-        proposedWorkflow,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        expiresAt: "2026-06-04T00:30:00.000Z",
-      })),
+      get: vi.fn(async () =>
+        previewRecord({
+          baseWorkflow: unmanagedCurrentWorkflow,
+          baseWorkflowHash: stableHash(unmanagedCurrentWorkflow),
+          diff: createWorkflowDiff(unmanagedCurrentWorkflow, proposedWorkflow),
+        }),
+      ),
     }
     const registry = {
       get: vi.fn(async () => registryRecord),
@@ -1004,17 +1065,7 @@ describe("updateWorkflow", () => {
       updateWorkflow: vi.fn(),
     }
     const previewStore = {
-      get: vi.fn(async () => ({
-        previewId: "preview_1",
-        workflowId: "wf_1",
-        baseWorkflowHash: stableHash(currentWorkflow),
-        proposedWorkflowHash: stableHash(proposedWorkflow),
-        summary: "Apply Slack",
-        changes: ["Add Slack node"],
-        proposedWorkflow,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        expiresAt: "2026-06-04T00:30:00.000Z",
-      })),
+      get: vi.fn(async () => previewRecord()),
     }
     const registry = {
       get: vi.fn(async () => registryRecord),

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { N8nWorkflow, N8nWorkflowConnection, N8nWorkflowNode } from "./validator.js"
+import type { WorkflowDiff } from "./workflow-diff.js"
 
 export type UpdatePreview = {
   previewId: string
@@ -10,7 +11,9 @@ export type UpdatePreview = {
   proposedWorkflowHash: string
   summary: string
   changes: string[]
+  baseWorkflow: N8nWorkflow
   proposedWorkflow: N8nWorkflow
+  diff: WorkflowDiff
   createdAt: string
   expiresAt: string
 }
@@ -73,7 +76,9 @@ function isUpdatePreview(value: unknown): value is UpdatePreview {
     typeof value.summary === "string" &&
     Array.isArray(value.changes) &&
     value.changes.every((change) => typeof change === "string") &&
+    isN8nWorkflowShape(value.baseWorkflow) &&
     isN8nWorkflowShape(value.proposedWorkflow) &&
+    isWorkflowDiffShape(value.diff) &&
     typeof value.createdAt === "string" &&
     typeof value.expiresAt === "string"
   )
@@ -158,6 +163,50 @@ function isN8nWorkflowConnectionShape(value: unknown): value is N8nWorkflowConne
     typeof value.index === "number" &&
     Number.isFinite(value.index)
   )
+}
+
+function isWorkflowDiffShape(value: unknown): value is WorkflowDiff {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.addedNodes) &&
+    value.addedNodes.every(isWorkflowNodeDiffShape) &&
+    Array.isArray(value.removedNodes) &&
+    value.removedNodes.every(isWorkflowNodeDiffShape) &&
+    Array.isArray(value.changedNodeParameters) &&
+    value.changedNodeParameters.every(isNodeParameterDiffShape) &&
+    Array.isArray(value.changedCredentials) &&
+    value.changedCredentials.every(isNodeCredentialDiffShape) &&
+    Array.isArray(value.changedConnections) &&
+    value.changedConnections.every(isConnectionDiffShape) &&
+    Array.isArray(value.changedSettings) &&
+    value.changedSettings.every(isSettingDiffShape)
+  )
+}
+
+function isWorkflowNodeDiffShape(value: unknown): boolean {
+  return isRecord(value) && typeof value.nodeName === "string" && typeof value.nodeType === "string"
+}
+
+function isNodeParameterDiffShape(value: unknown): boolean {
+  return isRecord(value) && typeof value.nodeName === "string" && typeof value.path === "string"
+}
+
+function isNodeCredentialDiffShape(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.nodeName === "string" &&
+    typeof value.credentialType === "string" &&
+    (value.beforeName === undefined || typeof value.beforeName === "string") &&
+    (value.afterName === undefined || typeof value.afterName === "string")
+  )
+}
+
+function isConnectionDiffShape(value: unknown): boolean {
+  return isRecord(value) && typeof value.source === "string"
+}
+
+function isSettingDiffShape(value: unknown): boolean {
+  return isRecord(value) && typeof value.path === "string"
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

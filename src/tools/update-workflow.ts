@@ -12,6 +12,7 @@ import type { WorkflowRegistryRecord } from "../registry.js"
 import type { CredentialGap, CredentialSetupAction, Warning } from "../types.js"
 import { validateWorkflowForSave, type N8nWorkflow, type WorkflowIssue } from "../validator.js"
 import { compileWorkflowPlan } from "../workflow-compiler.js"
+import { createWorkflowDiff, type WorkflowDiff } from "../workflow-diff.js"
 import type { WorkflowPatchDraft, WorkflowPatchPlan } from "../workflow-plan.js"
 import { extractNodeTypeLookups, type NodeTypeLookup } from "./node-lookup.js"
 
@@ -30,6 +31,7 @@ export type UpdateWorkflowResult = {
   previewId?: string
   summary: string
   changes: string[]
+  diff?: WorkflowDiff
   missingCredentials: CredentialGap[]
   credentialActions: CredentialSetupAction[]
   warnings: Warning[]
@@ -169,6 +171,7 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
   }
 
   const credentialResolution = await resolveWorkflowCredentials(proposedWorkflow, deps.credentialResolver)
+  const diff = createWorkflowDiff(currentWorkflow, proposedWorkflow)
   const compatibilityWarnings = analyzeWorkflowNodeCompatibility(proposedWorkflow)
   const validateWorkflowCode = deps.mcp.validateWorkflowCode?.bind(deps.mcp)
   const mcpWarnings = validateWorkflowCode
@@ -180,7 +183,9 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     proposedWorkflowHash: stableHash(proposedWorkflow),
     summary: patchDraft.summary,
     changes: patchDraft.changes,
+    baseWorkflow: currentWorkflow,
     proposedWorkflow,
+    diff,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + previewTtlMs).toISOString(),
   })
@@ -193,6 +198,7 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     previewId: preview.previewId,
     summary: patchDraft.summary,
     changes: patchDraft.changes,
+    diff,
     missingCredentials: credentialResolution.missingCredentials,
     credentialActions: credentialResolution.credentialActions,
     warnings: [...proposedValidation.warnings.map(toWarning), ...compatibilityWarnings, ...mcpWarnings],
