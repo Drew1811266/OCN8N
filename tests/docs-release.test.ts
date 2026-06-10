@@ -81,4 +81,18 @@ describe("release documentation", () => {
       expect(changelog).toContain(`## ${version}`)
     }
   })
+
+  it("defines the default GitHub Actions check workflow", async () => {
+    const workflow = await readFile(".github/workflows/check.yml", "utf8")
+
+    expect(workflow).toContain("name: check")
+    expect(workflow).toContain("actions/checkout")
+    expect(workflow).toContain("actions/setup-node")
+    expect(workflow).toContain("node-version: 20")
+    expect(workflow).toContain("npm ci")
+    expect(workflow).toContain("npm run typecheck")
+    expect(workflow).toContain("npm run test")
+    expect(workflow).toContain("npm run build")
+    expect(workflow).toContain("npm run package:check")
+  })
 })
