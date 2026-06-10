@@ -1,7 +1,7 @@
 {
   "name": "opencode-n8n-builder",
-  "version": "0.8.0",
-  "description": "OpenCode plugin for creating and updating managed n8n workflow drafts.",
+  "version": "0.9.0",
+  "description": "OpenCode plugin for creating, iterating, validating, and operating managed n8n workflows.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,6 +14,9 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
+    "docs",
+    "examples",
     "package.json"
   ],
   "scripts": {
@@ -22,7 +25,8 @@
     "test:e2e": "node scripts/run-e2e.mjs",
     "test:e2e:vitest": "vitest run --config vitest.e2e.config.ts",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run test && npm run build"
+    "package:check": "node scripts/check-package-files.mjs",
+    "check": "npm run typecheck && npm run test && npm run build && npm run package:check"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.15.13",
@@ -42,5 +46,16 @@
     "workflow",
     "automation"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Drew1811266/OCN8N.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Drew1811266/OCN8N/issues"
+  },
+  "homepage": "https://github.com/Drew1811266/OCN8N#readme",
+  "engines": {
+    "node": ">=20"
+  },
   "license": "Apache-2.0"
 }
