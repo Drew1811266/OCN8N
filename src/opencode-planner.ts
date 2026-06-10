@@ -193,6 +193,8 @@ export class OpencodePlanner {
     return [
       "Create a full replacement WorkflowPatchPlan for a managed n8n workflow.",
       "Preserve existing behavior unless the user request changes it.",
+      "Preserve unchanged node names, ids, credentials, and connections unless the user explicitly asks to change them.",
+      "Prefer the smallest complete replacement workflow that satisfies the requested change.",
       "Do not include secret values, API keys, tokens, passwords, OAuth secrets, or bearer strings.",
       "Use credential reference names only when a node needs credentials.",
       "Explain why each selected node type is needed in nodeSelection.",

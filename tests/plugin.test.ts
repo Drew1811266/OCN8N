@@ -89,7 +89,40 @@ describe("plugin exports", () => {
       "n8n_list_managed_workflows",
     ])
     expect(Object.keys(result.tool?.n8n_build_workflow.args ?? {})).toEqual(["prompt", "name"])
+    expect(Object.keys(result.tool?.n8n_update_workflow.args ?? {})).toEqual(["workflowId", "prompt", "mode", "previewId"])
+    expect((result.tool?.n8n_update_workflow.args.mode as { options?: string[] } | undefined)?.options).toEqual([
+      "preview",
+      "apply",
+      "rollback-preview",
+      "rollback-apply",
+    ])
     expect(Object.keys(result.tool?.n8n_claim_workflow.args ?? {})).toEqual(["workflowId", "mode", "confirm"])
+  })
+
+  it("routes rollback update modes without requiring MCP configuration", async () => {
+    await withoutN8nEnv(async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
+      const plugin = createN8nBuilderPlugin({ version: "0.7.0" })
+      const result = await plugin(
+        mockPluginInput({
+          directory,
+          opencodeConfig: {
+            n8n: {
+              baseUrl: "https://demo/api/v1",
+              apiKey: "key",
+            },
+          },
+        }),
+      )
+
+      await expect(
+        result.tool?.n8n_update_workflow.execute({ workflowId: "wf_1", mode: "rollback-preview" }, {} as never),
+      ).rejects.toMatchObject({
+        code: "TOOL_ARGS_INVALID",
+        message: "rollback-preview updates require a previewId.",
+        details: { field: "previewId" },
+      })
+    })
   })
 
   it("logs the configured version during initialization", async () => {

@@ -163,6 +163,10 @@ describe("OpencodePlanner", () => {
     expect(promptText).toContain("Node compatibility guidance:")
     expect(promptText).toContain("n8n-nodes-base.slack: tier_2_modeled")
     expect(promptText).toContain("Explain why each selected node type is needed in nodeSelection.")
+    expect(promptText).toContain(
+      "Preserve unchanged node names, ids, credentials, and connections unless the user explicitly asks to change them.",
+    )
+    expect(promptText).toContain("Prefer the smallest complete replacement workflow that satisfies the requested change.")
   })
 
   it("creates a session, requests JSON workflow plan output, and parses the result", async () => {
@@ -321,6 +325,12 @@ describe("OpencodePlanner", () => {
     expect(promptInput?.body.parts[0]?.text).toContain("Suggested node guidance:")
     expect(promptInput?.body.parts[0]?.text).toContain("Use Schedule Trigger for recurring execution.")
     expect(promptInput?.body.parts[0]?.text).toContain("Explain why each selected node type is needed in nodeSelection.")
+    expect(promptInput?.body.parts[0]?.text).toContain(
+      "Preserve unchanged node names, ids, credentials, and connections unless the user explicitly asks to change them.",
+    )
+    expect(promptInput?.body.parts[0]?.text).toContain(
+      "Prefer the smallest complete replacement workflow that satisfies the requested change.",
+    )
   })
 
   it("redacts secret-looking values from current workflow JSON in patch prompts", async () => {

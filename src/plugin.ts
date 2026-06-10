@@ -134,7 +134,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
           args: {
             workflowId: tool.schema.string().min(1),
             prompt: tool.schema.string().optional(),
-            mode: tool.schema.enum(["preview", "apply"]),
+            mode: tool.schema.enum(["preview", "apply", "rollback-preview", "rollback-apply"]),
             previewId: tool.schema.string().optional(),
           },
           async execute(args) {
@@ -262,7 +262,7 @@ function toClaimWorkflowArgs(args: {
 function toUpdateWorkflowArgs(args: {
   workflowId: string
   prompt?: string
-  mode: "preview" | "apply"
+  mode: "preview" | "apply" | "rollback-preview" | "rollback-apply"
   previewId?: string
 }): UpdateWorkflowArgs {
   if (args.mode === "preview") {
@@ -280,7 +280,7 @@ function toUpdateWorkflowArgs(args: {
   }
 
   if (!args.previewId?.trim()) {
-    throw new N8nBuilderError("Apply updates require a previewId.", "TOOL_ARGS_INVALID", {
+    throw new N8nBuilderError(`${args.mode} updates require a previewId.`, "TOOL_ARGS_INVALID", {
       field: "previewId",
     })
   }
