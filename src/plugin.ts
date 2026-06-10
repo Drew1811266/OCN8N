@@ -9,6 +9,10 @@ import { PreviewStore } from "./preview-store.js"
 import { WorkflowRegistry } from "./registry.js"
 import { buildWorkflow } from "./tools/build-workflow.js"
 import { claimWorkflow, type ClaimWorkflowArgs } from "./tools/claim-workflow.js"
+import {
+  checkWorkflowReadiness,
+  type CheckWorkflowReadinessArgs,
+} from "./tools/check-workflow-readiness.js"
 import { inspectWorkflow } from "./tools/inspect-workflow.js"
 import { listManagedWorkflows } from "./tools/list-managed-workflows.js"
 import { updateWorkflow, type UpdateWorkflowArgs } from "./tools/update-workflow.js"
@@ -190,6 +194,31 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
           },
         }),
 
+        n8n_check_workflow_readiness: tool({
+          description:
+            "Check production readiness for a managed n8n workflow, explicitly activate/deactivate it, and report runtime diagnostics.",
+          args: {
+            workflowId: tool.schema.string().min(1),
+            mode: tool.schema.enum(["preview", "activate", "deactivate"]),
+            confirm: tool.schema.boolean().optional(),
+            allowWarnings: tool.schema.boolean().optional(),
+          },
+          async execute(args) {
+            const resolved = await apiDeps()
+            const result = await checkWorkflowReadiness({
+              args: toCheckWorkflowReadinessArgs(args),
+              config: {
+                baseUrl: resolved.config.baseUrl,
+                pluginVersion: resolved.config.pluginVersion,
+              },
+              api: resolved.api,
+              registry: resolved.registry,
+            })
+
+            return jsonOutput("n8n workflow readiness", result)
+          },
+        }),
+
         n8n_inspect_workflow: tool({
           description:
             "Inspect a managed n8n workflow and report nodes, connections, credential gaps, and validation issues.",
@@ -238,6 +267,36 @@ async function getOpencodeConfig(client: PluginInput["client"], directory: strin
   }
 
   return response
+}
+
+function toCheckWorkflowReadinessArgs(args: {
+  workflowId: string
+  mode: "preview" | "activate" | "deactivate"
+  confirm?: boolean
+  allowWarnings?: boolean
+}): CheckWorkflowReadinessArgs {
+  if (args.mode === "preview") {
+    return {
+      workflowId: args.workflowId,
+      mode: args.mode,
+      allowWarnings: args.allowWarnings,
+    }
+  }
+
+  if (args.mode === "activate") {
+    return {
+      workflowId: args.workflowId,
+      mode: args.mode,
+      confirm: args.confirm === true,
+      allowWarnings: args.allowWarnings,
+    }
+  }
+
+  return {
+    workflowId: args.workflowId,
+    mode: args.mode,
+    confirm: args.confirm === true,
+  }
 }
 
 function toClaimWorkflowArgs(args: {

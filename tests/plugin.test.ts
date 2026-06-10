@@ -76,7 +76,7 @@ describe("plugin exports", () => {
     expect(typeof N8nBuilderPlugin).toBe("function")
   })
 
-  it("registers the five n8n tools", async () => {
+  it("registers the six n8n tools", async () => {
     const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
 
     const result = await plugin(mockPluginInput())
@@ -85,6 +85,7 @@ describe("plugin exports", () => {
       "n8n_build_workflow",
       "n8n_update_workflow",
       "n8n_claim_workflow",
+      "n8n_check_workflow_readiness",
       "n8n_inspect_workflow",
       "n8n_list_managed_workflows",
     ])
@@ -97,6 +98,12 @@ describe("plugin exports", () => {
       "rollback-apply",
     ])
     expect(Object.keys(result.tool?.n8n_claim_workflow.args ?? {})).toEqual(["workflowId", "mode", "confirm"])
+    expect(Object.keys(result.tool?.n8n_check_workflow_readiness.args ?? {})).toEqual([
+      "workflowId",
+      "mode",
+      "confirm",
+      "allowWarnings",
+    ])
   })
 
   it("routes rollback update modes without requiring MCP configuration", async () => {
@@ -254,6 +261,85 @@ describe("plugin exports", () => {
           expect.objectContaining({
             workflowId: "wf_1",
             name: "Orders",
+          }),
+        )
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    })
+  })
+
+  it("routes readiness preview without requiring OpenCode planner configuration", async () => {
+    await withoutN8nEnv(async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
+      await mkdir(path.join(directory, ".opencode"), { recursive: true })
+      await writeFile(
+        path.join(directory, ".opencode", "n8n-workflows.json"),
+        `${JSON.stringify({
+          workflows: [
+            {
+              workflowId: "wf_1",
+              name: "Orders",
+              url: "https://demo/workflow/wf_1",
+              baseUrl: "https://demo/api/v1",
+              managedBy: "opencode-n8n-builder",
+              managedByVersion: "0.8.0",
+              lastPlanHash: "hash",
+              lastUpdatedAt: "2026-06-04T00:00:00.000Z",
+            },
+          ],
+        })}\n`,
+        "utf8",
+      )
+      const originalFetch = globalThis.fetch
+      const fetchMock = vi.fn(async (input: string) => {
+        if (input.includes("/executions")) {
+          return new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })
+        }
+
+        return new Response(
+          JSON.stringify({
+            id: "wf_1",
+            name: "Orders",
+            active: false,
+            nodes: [],
+            connections: {},
+            settings: {},
+            tags: [{ name: "opencode-n8n-builder" }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )
+      })
+      globalThis.fetch = fetchMock as typeof fetch
+
+      try {
+        const plugin = createN8nBuilderPlugin({ version: "0.8.0" })
+        const result = await plugin(
+          mockPluginInput({
+            directory,
+            opencodeConfig: {
+              n8n: {
+                baseUrl: "https://demo/api/v1",
+                apiKey: "key",
+              },
+            },
+          }),
+        )
+
+        const output = parseToolOutput(
+          await result.tool?.n8n_check_workflow_readiness.execute(
+            { workflowId: "wf_1", mode: "preview" },
+            {} as never,
+          ),
+        )
+
+        expect(output).toEqual(
+          expect.objectContaining({
+            workflowId: "wf_1",
+            mode: "preview",
           }),
         )
       } finally {
