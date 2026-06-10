@@ -3,12 +3,16 @@ import { compileWorkflowPlan } from "../../../src/workflow-compiler.js"
 import { workflowPatchPlanSchema, workflowPlanSchema, type WorkflowPlan } from "../../../src/workflow-plan.js"
 import type { N8nWorkflowNode } from "../../../src/validator.js"
 import {
+  e2eApiPollingNoticePlan,
   e2eManualSetSdkCode,
   e2eManualSetPlan,
+  e2eScheduleHttpIfSetPlan,
   e2eScheduleHttpIfPlan,
   e2eUpdatedManualIfSdkCode,
   e2eUpdatedManualIfPlan,
+  e2eWebhookBranchMergePlan,
   e2eWebhookSetPlan,
+  e2eWebhookTransformResponsePlan,
 } from "./test-workflows.js"
 
 const e2eMarker = {
@@ -50,6 +54,40 @@ describe("e2e workflow fixtures", () => {
 
   it("validates update patch plan against workflowPatchPlanSchema", () => {
     expect(() => workflowPatchPlanSchema.parse(e2eUpdatedManualIfPlan)).not.toThrow()
+  })
+
+  it("provides v0.4 compatibility scenario fixtures for low-risk node families", () => {
+    const scenarios = [
+      e2eWebhookTransformResponsePlan,
+      e2eScheduleHttpIfSetPlan,
+      e2eWebhookBranchMergePlan,
+      e2eApiPollingNoticePlan,
+    ]
+
+    for (const plan of scenarios) {
+      expect(() => workflowPlanSchema.parse(plan)).not.toThrow()
+      const workflow = compileE2ePlan(plan)
+      expect(workflow.active).toBe(false)
+      expect(workflow.nodes.length).toBeGreaterThanOrEqual(3)
+      expect(JSON.stringify(workflow)).not.toMatch(/apiKey|Bearer|secret/i)
+    }
+  })
+
+  it("compiles webhook transform response scenario with Respond to Webhook", () => {
+    const workflow = compileE2ePlan(e2eWebhookTransformResponsePlan)
+
+    expect(workflow.nodes.map((node) => node.type)).toEqual([
+      "n8n-nodes-base.webhook",
+      "n8n-nodes-base.set",
+      "n8n-nodes-base.respondToWebhook",
+    ])
+  })
+
+  it("compiles branch and merge scenario with Switch and Merge", () => {
+    const workflow = compileE2ePlan(e2eWebhookBranchMergePlan)
+
+    expect(workflow.nodes.map((node) => node.type)).toContain("n8n-nodes-base.switch")
+    expect(workflow.nodes.map((node) => node.type)).toContain("n8n-nodes-base.merge")
   })
 
   it("compiles manual workflow as inactive managed workflow", () => {

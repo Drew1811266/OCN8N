@@ -200,6 +200,266 @@ export const e2eScheduleHttpIfPlan: WorkflowPlan = workflowPlanSchema.parse({
   ],
 })
 
+export const e2eWebhookTransformResponsePlan: WorkflowPlan = workflowPlanSchema.parse({
+  name: "OCN8N E2E Webhook Transform Response",
+  summary: "Webhook receives a payload, normalizes it, and returns a response.",
+  nodes: [
+    {
+      key: "webhook",
+      name: "Webhook",
+      type: "n8n-nodes-base.webhook",
+      typeVersion: 2,
+      position: [0, 0],
+      parameters: {
+        path: "ocn8n-e2e-transform-response",
+        httpMethod: "POST",
+        responseMode: "responseNode",
+      },
+    },
+    {
+      key: "set",
+      name: "Normalize Payload",
+      type: "n8n-nodes-base.set",
+      typeVersion: 3.4,
+      position: [280, 0],
+      parameters: {
+        assignments: {
+          assignments: [
+            {
+              id: "status",
+              name: "status",
+              type: "string",
+              value: "accepted",
+            },
+          ],
+        },
+      },
+    },
+    {
+      key: "respond",
+      name: "Respond to Webhook",
+      type: "n8n-nodes-base.respondToWebhook",
+      typeVersion: 1.1,
+      position: [560, 0],
+      parameters: {
+        respondWith: "json",
+        responseBody: "={{ { status: $json.status } }}",
+      },
+    },
+  ],
+  connections: [
+    { from: "webhook", to: "set" },
+    { from: "set", to: "respond" },
+  ],
+})
+
+export const e2eScheduleHttpIfSetPlan: WorkflowPlan = workflowPlanSchema.parse({
+  name: "OCN8N E2E Schedule HTTP IF Set",
+  summary: "Schedule calls a public endpoint, checks status, and writes a result field.",
+  nodes: [
+    ...e2eScheduleHttpIfPlan.nodes,
+    {
+      key: "set",
+      name: "Set Poll Result",
+      type: "n8n-nodes-base.set",
+      typeVersion: 3.4,
+      position: [840, 0],
+      parameters: {
+        assignments: {
+          assignments: [
+            {
+              id: "pollStatus",
+              name: "pollStatus",
+              type: "string",
+              value: "ok",
+            },
+          ],
+        },
+      },
+    },
+  ],
+  connections: [
+    ...e2eScheduleHttpIfPlan.connections,
+    { from: "if", to: "set" },
+  ],
+})
+
+export const e2eWebhookBranchMergePlan: WorkflowPlan = workflowPlanSchema.parse({
+  name: "OCN8N E2E Webhook Branch Merge",
+  summary: "Webhook routes data through a switch and reconnects branches with merge.",
+  nodes: [
+    {
+      key: "webhook",
+      name: "Webhook",
+      type: "n8n-nodes-base.webhook",
+      typeVersion: 2,
+      position: [0, 0],
+      parameters: {
+        path: "ocn8n-e2e-branch-merge",
+        httpMethod: "POST",
+        responseMode: "lastNode",
+      },
+    },
+    {
+      key: "switch",
+      name: "Route Type",
+      type: "n8n-nodes-base.switch",
+      typeVersion: 3,
+      position: [280, 0],
+      parameters: {
+        rules: {
+          values: [
+            {
+              conditions: {
+                conditions: [
+                  {
+                    leftValue: "={{ $json.type }}",
+                    rightValue: "priority",
+                    operator: {
+                      type: "string",
+                      operation: "equals",
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    },
+    {
+      key: "prioritySet",
+      name: "Set Priority",
+      type: "n8n-nodes-base.set",
+      typeVersion: 3.4,
+      position: [560, -120],
+      parameters: {
+        assignments: {
+          assignments: [{ id: "priority", name: "priority", type: "string", value: "high" }],
+        },
+      },
+    },
+    {
+      key: "defaultSet",
+      name: "Set Default",
+      type: "n8n-nodes-base.set",
+      typeVersion: 3.4,
+      position: [560, 120],
+      parameters: {
+        assignments: {
+          assignments: [{ id: "priority", name: "priority", type: "string", value: "normal" }],
+        },
+      },
+    },
+    {
+      key: "merge",
+      name: "Merge Branches",
+      type: "n8n-nodes-base.merge",
+      typeVersion: 3,
+      position: [840, 0],
+      parameters: {
+        mode: "append",
+      },
+    },
+  ],
+  connections: [
+    { from: "webhook", to: "switch" },
+    { from: "switch", to: "prioritySet", outputIndex: 0 },
+    { from: "switch", to: "defaultSet", outputIndex: 1 },
+    { from: "prioritySet", to: "merge", inputIndex: 0 },
+    { from: "defaultSet", to: "merge", inputIndex: 1 },
+  ],
+})
+
+export const e2eApiPollingNoticePlan: WorkflowPlan = workflowPlanSchema.parse({
+  name: "OCN8N E2E API Polling Notice",
+  summary: "Schedule polls a public endpoint and prepares a local notice payload.",
+  nodes: [
+    {
+      key: "schedule",
+      name: "Schedule Trigger",
+      type: "n8n-nodes-base.scheduleTrigger",
+      typeVersion: 1,
+      position: [0, 0],
+      parameters: {
+        rule: {
+          interval: [{ field: "hours", hoursInterval: 1 }],
+        },
+      },
+    },
+    {
+      key: "http",
+      name: "HTTP Request",
+      type: "n8n-nodes-base.httpRequest",
+      typeVersion: 4.2,
+      position: [280, 0],
+      parameters: {
+        method: "GET",
+        url: "https://example.com",
+        options: {
+          response: {
+            response: {
+              responseFormat: "text",
+            },
+          },
+        },
+      },
+    },
+    {
+      key: "if",
+      name: "Check Status",
+      type: "n8n-nodes-base.if",
+      typeVersion: 2,
+      position: [560, 0],
+      parameters: {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            leftValue: "",
+            typeValidation: "strict",
+          },
+          conditions: [
+            {
+              id: "status-check",
+              leftValue: "={{ $json.statusCode || 200 }}",
+              rightValue: 200,
+              operator: {
+                type: "number",
+                operation: "equals",
+              },
+            },
+          ],
+          combinator: "and",
+        },
+      },
+    },
+    {
+      key: "set",
+      name: "Prepare Notice",
+      type: "n8n-nodes-base.set",
+      typeVersion: 3.4,
+      position: [840, 0],
+      parameters: {
+        assignments: {
+          assignments: [
+            {
+              id: "notice",
+              name: "notice",
+              type: "string",
+              value: "public endpoint check completed",
+            },
+          ],
+        },
+      },
+    },
+  ],
+  connections: [
+    { from: "schedule", to: "http" },
+    { from: "http", to: "if" },
+    { from: "if", to: "set" },
+  ],
+})
+
 export const e2eUpdatedManualIfPlan: WorkflowPatchPlan = workflowPatchPlanSchema.parse({
   summary: "Add an IF branch after the Set node.",
   changes: ["Add IF node that checks the generated message."],
