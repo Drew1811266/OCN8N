@@ -97,6 +97,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
           api,
           env: process.env,
           credentialEnv: config.credentialEnv,
+          baseUrl: config.baseUrl,
         }),
       }
     }

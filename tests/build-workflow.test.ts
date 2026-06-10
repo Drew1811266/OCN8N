@@ -171,6 +171,7 @@ describe("buildWorkflow", () => {
       nodeCount: 2,
       summary: "Receive order webhooks and alert Slack.",
       missingCredentials: [],
+      credentialActions: [],
       warnings: [],
     })
   })
@@ -281,6 +282,14 @@ describe("buildWorkflow", () => {
           id: "cred_1",
           name: "OpenCode Slack",
         },
+        action: {
+          nodeName: "Send Slack Alert",
+          credentialType: "slackApi",
+          credentialName: "OpenCode Slack",
+          action: "reuse_existing",
+          status: "resolved",
+          message: "Reusing existing n8n credential OpenCode Slack for Send Slack Alert.",
+        },
       })),
     }
 
@@ -315,6 +324,16 @@ describe("buildWorkflow", () => {
       }),
     )
     expect(result.missingCredentials).toEqual([])
+    expect(result.credentialActions).toEqual([
+      {
+        nodeName: "Send Slack Alert",
+        credentialType: "slackApi",
+        credentialName: "OpenCode Slack",
+        action: "reuse_existing",
+        status: "resolved",
+        message: "Reusing existing n8n credential OpenCode Slack for Send Slack Alert.",
+      },
+    ])
   })
 
   it("reports credential gaps while still creating a draft workflow", async () => {
@@ -335,6 +354,16 @@ describe("buildWorkflow", () => {
           credentialType: "slackApi",
           credentialName: "OpenCode Slack",
           reason: "Missing environment variables: SLACK_BOT_TOKEN",
+        },
+        action: {
+          nodeName: "Send Slack Alert",
+          credentialType: "slackApi",
+          credentialName: "OpenCode Slack",
+          action: "set_missing_env",
+          status: "required",
+          message: "Set missing environment variables for OpenCode Slack: SLACK_BOT_TOKEN.",
+          requiredEnv: ["SLACK_BOT_TOKEN"],
+          manualSetupUrl: "https://demo/credentials",
         },
       })),
     }
@@ -357,6 +386,18 @@ describe("buildWorkflow", () => {
         credentialType: "slackApi",
         credentialName: "OpenCode Slack",
         reason: "Missing environment variables: SLACK_BOT_TOKEN",
+      },
+    ])
+    expect(result.credentialActions).toEqual([
+      {
+        nodeName: "Send Slack Alert",
+        credentialType: "slackApi",
+        credentialName: "OpenCode Slack",
+        action: "set_missing_env",
+        status: "required",
+        message: "Set missing environment variables for OpenCode Slack: SLACK_BOT_TOKEN.",
+        requiredEnv: ["SLACK_BOT_TOKEN"],
+        manualSetupUrl: "https://demo/credentials",
       },
     ])
   })

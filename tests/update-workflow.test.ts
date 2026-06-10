@@ -255,6 +255,7 @@ describe("updateWorkflow", () => {
       summary: "Add Slack notification",
       changes: ["Add Slack node"],
       missingCredentials: [],
+      credentialActions: [],
       warnings: [],
     })
   })
@@ -531,6 +532,14 @@ describe("updateWorkflow", () => {
           id: "cred_1",
           name: "OpenCode Slack",
         },
+        action: {
+          nodeName: "Send Slack Alert",
+          credentialType: "slackApi",
+          credentialName: "OpenCode Slack",
+          action: "reuse_existing",
+          status: "resolved",
+          message: "Reusing existing n8n credential OpenCode Slack for Send Slack Alert.",
+        },
       })),
     }
     const registry = {
@@ -561,6 +570,16 @@ describe("updateWorkflow", () => {
       }),
     )
     expect(result.missingCredentials).toEqual([])
+    expect(result.credentialActions).toEqual([
+      {
+        nodeName: "Send Slack Alert",
+        credentialType: "slackApi",
+        credentialName: "OpenCode Slack",
+        action: "reuse_existing",
+        status: "resolved",
+        message: "Reusing existing n8n credential OpenCode Slack for Send Slack Alert.",
+      },
+    ])
   })
 
   it("passes MCP suggested-node guidance into preview planning when prompt matches categories", async () => {
@@ -668,6 +687,7 @@ describe("updateWorkflow", () => {
       summary: "Apply Slack",
       changes: ["Add Slack node"],
       missingCredentials: [],
+      credentialActions: [],
       warnings: [],
     })
   })

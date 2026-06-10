@@ -9,7 +9,7 @@ import {
 import type { PatchPlannerContext } from "../opencode-planner.js"
 import type { SaveUpdatePreviewInput, UpdatePreview } from "../preview-store.js"
 import type { WorkflowRegistryRecord } from "../registry.js"
-import type { CredentialGap, Warning } from "../types.js"
+import type { CredentialGap, CredentialSetupAction, Warning } from "../types.js"
 import { validateWorkflowForSave, type N8nWorkflow, type WorkflowIssue } from "../validator.js"
 import { compileWorkflowPlan } from "../workflow-compiler.js"
 import type { WorkflowPatchDraft, WorkflowPatchPlan } from "../workflow-plan.js"
@@ -31,6 +31,7 @@ export type UpdateWorkflowResult = {
   summary: string
   changes: string[]
   missingCredentials: CredentialGap[]
+  credentialActions: CredentialSetupAction[]
   warnings: Warning[]
 }
 
@@ -71,7 +72,13 @@ type WorkflowCredentialResolver = {
       name: string
     }
     gap?: CredentialGap
+    action?: CredentialSetupAction
   }>
+}
+
+type WorkflowCredentialResolution = {
+  missingCredentials: CredentialGap[]
+  credentialActions: CredentialSetupAction[]
 }
 
 type PreviewUpdateDeps = UpdateWorkflowDeps & {
@@ -161,7 +168,7 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     })
   }
 
-  const missingCredentials = await resolveWorkflowCredentials(proposedWorkflow, deps.credentialResolver)
+  const credentialResolution = await resolveWorkflowCredentials(proposedWorkflow, deps.credentialResolver)
   const compatibilityWarnings = analyzeWorkflowNodeCompatibility(proposedWorkflow)
   const validateWorkflowCode = deps.mcp.validateWorkflowCode?.bind(deps.mcp)
   const mcpWarnings = validateWorkflowCode
@@ -186,7 +193,8 @@ async function previewUpdate(deps: PreviewUpdateDeps): Promise<UpdateWorkflowRes
     previewId: preview.previewId,
     summary: patchDraft.summary,
     changes: patchDraft.changes,
-    missingCredentials,
+    missingCredentials: credentialResolution.missingCredentials,
+    credentialActions: credentialResolution.credentialActions,
     warnings: [...proposedValidation.warnings.map(toWarning), ...compatibilityWarnings, ...mcpWarnings],
   }
 }
@@ -287,6 +295,7 @@ async function applyUpdate(deps: ApplyUpdateDeps): Promise<UpdateWorkflowResult>
     summary: preview.summary,
     changes: preview.changes,
     missingCredentials: [],
+    credentialActions: [],
     warnings: proposedValidation.warnings.map(toWarning),
   }
 }
@@ -341,10 +350,11 @@ function workflowUrl(baseUrl: string, workflowId: string): string {
 async function resolveWorkflowCredentials(
   workflow: N8nWorkflow,
   credentialResolver: WorkflowCredentialResolver | undefined,
-): Promise<CredentialGap[]> {
-  if (!credentialResolver) return []
+): Promise<WorkflowCredentialResolution> {
+  if (!credentialResolver) return { missingCredentials: [], credentialActions: [] }
 
   const missingCredentials: CredentialGap[] = []
+  const credentialActions: CredentialSetupAction[] = []
 
   for (const node of workflow.nodes) {
     if (!node.credentials) continue
@@ -365,10 +375,14 @@ async function resolveWorkflowCredentials(
       if (result.gap) {
         missingCredentials.push(result.gap)
       }
+
+      if (result.action) {
+        credentialActions.push(result.action)
+      }
     }
   }
 
-  return missingCredentials
+  return { missingCredentials, credentialActions }
 }
 
 function toWarning(issue: WorkflowIssue): Warning {
