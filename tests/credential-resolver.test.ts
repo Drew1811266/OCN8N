@@ -15,6 +15,7 @@ describe("CredentialResolver", () => {
     const resolver = new CredentialResolver({
       api,
       env: {},
+      baseUrl: "https://demo/api/v1",
       credentialEnv: {
         slackApi: {
           name: "OpenCode Slack",
@@ -27,6 +28,14 @@ describe("CredentialResolver", () => {
     const result = await resolver.resolve({ nodeName: "Slack", credentialType: "slackApi" })
 
     expect(result.reference).toEqual({ id: "cred_1", name: "OpenCode Slack" })
+    expect(result.action).toEqual({
+      nodeName: "Slack",
+      credentialType: "slackApi",
+      credentialName: "OpenCode Slack",
+      action: "reuse_existing",
+      status: "resolved",
+      message: "Reusing existing n8n credential OpenCode Slack for Slack.",
+    })
     expect(result.gap).toBeUndefined()
     expect(api.createCredential).not.toHaveBeenCalled()
   })
@@ -39,6 +48,7 @@ describe("CredentialResolver", () => {
     const resolver = new CredentialResolver({
       api,
       env: {},
+      baseUrl: "https://demo/api/v1",
       credentialEnv: {
         slackApi: {
           name: "OpenCode Slack",
@@ -57,6 +67,16 @@ describe("CredentialResolver", () => {
         credentialName: "OpenCode Slack",
         reason: "Missing environment variables: SLACK_BOT_TOKEN, SLACK_TEAM_ID",
       },
+      action: {
+        nodeName: "Slack",
+        credentialType: "slackApi",
+        credentialName: "OpenCode Slack",
+        action: "set_missing_env",
+        status: "required",
+        message: "Set missing environment variables for OpenCode Slack: SLACK_BOT_TOKEN, SLACK_TEAM_ID.",
+        requiredEnv: ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"],
+        manualSetupUrl: "https://demo/credentials",
+      },
     })
     expect(api.createCredential).not.toHaveBeenCalled()
   })
@@ -69,6 +89,7 @@ describe("CredentialResolver", () => {
     const resolver = new CredentialResolver({
       api,
       env: {},
+      baseUrl: "https://demo/api/v1",
       credentialEnv: {},
     })
 
@@ -79,6 +100,14 @@ describe("CredentialResolver", () => {
         nodeName: "Slack",
         credentialType: "slackApi",
         reason: "No credential mapping configured for this credential type.",
+      },
+      action: {
+        nodeName: "Slack",
+        credentialType: "slackApi",
+        action: "configure_mapping",
+        status: "required",
+        message: "Configure n8n.credentialEnv.slackApi so the plugin can reuse or create this credential.",
+        manualSetupUrl: "https://demo/credentials",
       },
     })
     expect(api.listCredentials).not.toHaveBeenCalled()
@@ -96,6 +125,7 @@ describe("CredentialResolver", () => {
         SLACK_BOT_TOKEN: "xoxb-secret",
         SLACK_TEAM_ID: "T123",
       },
+      baseUrl: "https://demo/api/v1",
       credentialEnv: {
         slackApi: {
           name: "OpenCode Slack",
@@ -112,8 +142,54 @@ describe("CredentialResolver", () => {
       type: "slackApi",
       data: { accessToken: "xoxb-secret", teamId: "T123" },
     })
-    expect(result).toEqual({ reference: { id: "cred_1", name: "OpenCode Slack" } })
+    expect(result).toEqual({
+      reference: { id: "cred_1", name: "OpenCode Slack" },
+      action: {
+        nodeName: "Slack",
+        credentialType: "slackApi",
+        credentialName: "OpenCode Slack",
+        action: "create_from_env",
+        status: "resolved",
+        message: "Created n8n credential OpenCode Slack from configured environment variables for Slack.",
+      },
+    })
     expect(JSON.stringify(result)).not.toContain("xoxb-secret")
+  })
+
+  it("returns OAuth handoff action instead of creating OAuth credentials", async () => {
+    const api = {
+      listCredentials: vi.fn(async () => []),
+      createCredential: vi.fn(),
+    }
+    const resolver = new CredentialResolver({
+      api,
+      env: {},
+      baseUrl: "https://demo/api/v1",
+      credentialEnv: {
+        gmailOAuth2: {
+          name: "OpenCode Gmail",
+          type: "gmailOAuth2",
+          env: {},
+          authMode: "oauth2",
+        },
+      },
+    })
+
+    const result = await resolver.resolve({ nodeName: "Gmail", credentialType: "gmailOAuth2" })
+
+    expect(result.reference).toBeUndefined()
+    expect(result.gap).toEqual({
+      nodeName: "Gmail",
+      credentialType: "gmailOAuth2",
+      credentialName: "OpenCode Gmail",
+      reason: "OAuth credentials must be completed manually in n8n UI.",
+    })
+    expect(result.action).toMatchObject({
+      action: "complete_oauth_in_n8n",
+      status: "required",
+      manualSetupUrl: "https://demo/credentials",
+    })
+    expect(api.createCredential).not.toHaveBeenCalled()
   })
 
   it("throws a redacted error when credential creation returns malformed data", async () => {
@@ -126,6 +202,7 @@ describe("CredentialResolver", () => {
     const resolver = new CredentialResolver({
       api,
       env: { SLACK_BOT_TOKEN: "xoxb-secret" },
+      baseUrl: "https://demo/api/v1",
       credentialEnv: {
         slackApi: {
           name: "OpenCode Slack",
