@@ -361,4 +361,103 @@ describe("N8nApiClient", () => {
       expect.objectContaining({ method: "DELETE" }),
     )
   })
+
+  it("activates and deactivates workflows through public API endpoints", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ id: "wf_1", name: "Orders", active: true, nodes: [], connections: {}, settings: {} }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ id: "wf_1", name: "Orders", active: false, nodes: [], connections: {}, settings: {} }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      )
+    const client = new N8nApiClient({
+      baseUrl: "https://demo.app.n8n.cloud/api/v1",
+      apiKey: "n8n_api_key",
+      fetch,
+    })
+
+    await expect(client.activateWorkflow("wf_1")).resolves.toMatchObject({ id: "wf_1", active: true })
+    await expect(client.deactivateWorkflow("wf_1")).resolves.toMatchObject({ id: "wf_1", active: false })
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      "https://demo.app.n8n.cloud/api/v1/workflows/wf_1/activate",
+      expect.objectContaining({ method: "POST" }),
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "https://demo.app.n8n.cloud/api/v1/workflows/wf_1/deactivate",
+      expect.objectContaining({ method: "POST" }),
+    )
+  })
+
+  it("lists execution summaries with workflow and limit query params", async () => {
+    const fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: "exec_1",
+              workflowId: "wf_1",
+              status: "success",
+              mode: "trigger",
+              startedAt: "2026-06-04T00:01:00.000Z",
+              stoppedAt: "2026-06-04T00:01:02.000Z",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    })
+    const client = new N8nApiClient({
+      baseUrl: "https://demo.app.n8n.cloud/api/v1",
+      apiKey: "n8n_api_key",
+      fetch,
+    })
+
+    await expect(client.listExecutions({ workflowId: "wf_1", limit: 5 })).resolves.toEqual([
+      {
+        id: "exec_1",
+        workflowId: "wf_1",
+        status: "success",
+        mode: "trigger",
+        startedAt: "2026-06-04T00:01:00.000Z",
+        stoppedAt: "2026-06-04T00:01:02.000Z",
+      },
+    ])
+    expect(fetch).toHaveBeenCalledWith(
+      "https://demo.app.n8n.cloud/api/v1/executions?workflowId=wf_1&limit=5",
+      expect.objectContaining({ method: "GET" }),
+    )
+  })
+
+  it("throws a parse error for malformed execution list responses", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: 123 }] }), { status: 200 }))
+    const client = new N8nApiClient({
+      baseUrl: "https://demo.app.n8n.cloud/api/v1",
+      apiKey: "n8n_api_key",
+      fetch,
+    })
+
+    await expect(client.listExecutions({ workflowId: "wf_1", limit: 5 })).rejects.toMatchObject({
+      code: "N8N_API_PARSE_ERROR",
+      details: {
+        path: "/executions?workflowId=wf_1&limit=5",
+        expected: "N8nExecutionSummary[] or { data: N8nExecutionSummary[], nextCursor?: string | null }",
+      },
+    } satisfies Partial<N8nBuilderError>)
+  })
 })

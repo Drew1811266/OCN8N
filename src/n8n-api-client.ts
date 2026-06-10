@@ -10,6 +10,21 @@ export type N8nCredentialSummary = {
   type: string
 }
 
+export type N8nExecutionSummary = {
+  id: string
+  workflowId?: string
+  status?: string
+  mode?: string
+  startedAt?: string
+  stoppedAt?: string
+  finished?: boolean
+}
+
+export type ListExecutionsInput = {
+  workflowId?: string
+  limit?: number
+}
+
 type CreateCredentialInput = {
   name: string
   type: string
@@ -24,6 +39,7 @@ type N8nApiClientOptions = {
 
 const credentialListExpected = "N8nCredentialSummary[] or { data: N8nCredentialSummary[], nextCursor?: string }"
 const workflowListExpected = "N8nWorkflow[] or { data: N8nWorkflow[], nextCursor?: string | null }"
+const executionListExpected = "N8nExecutionSummary[] or { data: N8nExecutionSummary[], nextCursor?: string | null }"
 
 export class N8nApiClient {
   private readonly baseUrl: string
@@ -53,6 +69,18 @@ export class N8nApiClient {
   async getWorkflow(workflowId: string): Promise<N8nWorkflow & { id: string }> {
     return this.request<N8nWorkflow & { id: string }>(`/workflows/${encodeURIComponent(workflowId)}`, {
       method: "GET",
+    })
+  }
+
+  async activateWorkflow(workflowId: string): Promise<N8nWorkflow & { id: string }> {
+    return this.request<N8nWorkflow & { id: string }>(`/workflows/${encodeURIComponent(workflowId)}/activate`, {
+      method: "POST",
+    })
+  }
+
+  async deactivateWorkflow(workflowId: string): Promise<N8nWorkflow & { id: string }> {
+    return this.request<N8nWorkflow & { id: string }>(`/workflows/${encodeURIComponent(workflowId)}/deactivate`, {
+      method: "POST",
     })
   }
 
@@ -91,6 +119,49 @@ export class N8nApiClient {
     } while (cursor)
 
     return workflows
+  }
+
+  async listExecutions(input: ListExecutionsInput = {}): Promise<N8nExecutionSummary[]> {
+    const executions: N8nExecutionSummary[] = []
+    let cursor: string | undefined
+
+    do {
+      const params = new URLSearchParams()
+      if (input.workflowId) params.set("workflowId", input.workflowId)
+      if (input.limit !== undefined) params.set("limit", String(input.limit))
+      if (cursor) params.set("cursor", cursor)
+
+      const query = params.toString()
+      const path = query ? `/executions?${query}` : "/executions"
+      let response: unknown
+
+      try {
+        response = await this.request<unknown>(path, { method: "GET" })
+      } catch (error) {
+        if (error instanceof N8nBuilderError && error.code === "N8N_API_PARSE_ERROR") {
+          throwExecutionListParseError(path)
+        }
+
+        throw error
+      }
+
+      if (Array.isArray(response)) {
+        if (!response.every(isN8nExecutionSummary)) {
+          throwExecutionListParseError(path)
+        }
+
+        return [...executions, ...response]
+      }
+
+      if (!isExecutionListPage(response)) {
+        throwExecutionListParseError(path)
+      }
+
+      executions.push(...response.data)
+      cursor = response.nextCursor ?? undefined
+    } while (cursor)
+
+    return executions
   }
 
   async deleteWorkflow(workflowId: string): Promise<void> {
@@ -254,6 +325,41 @@ function throwWorkflowListParseError(path: string): never {
   throw new N8nBuilderError("n8n API returned an invalid workflows response.", "N8N_API_PARSE_ERROR", {
     path,
     expected: workflowListExpected,
+  })
+}
+
+function isN8nExecutionSummary(value: unknown): value is N8nExecutionSummary {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+  const execution = value as Record<string, unknown>
+  return (
+    typeof execution.id === "string" &&
+    (execution.workflowId === undefined || typeof execution.workflowId === "string") &&
+    (execution.status === undefined || typeof execution.status === "string") &&
+    (execution.mode === undefined || typeof execution.mode === "string") &&
+    (execution.startedAt === undefined || typeof execution.startedAt === "string") &&
+    (execution.stoppedAt === undefined || typeof execution.stoppedAt === "string") &&
+    (execution.finished === undefined || typeof execution.finished === "boolean")
+  )
+}
+
+function isExecutionListPage(
+  value: unknown,
+): value is { data: N8nExecutionSummary[]; nextCursor?: string | null } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+  const page = value as Record<string, unknown>
+  return (
+    Array.isArray(page.data) &&
+    page.data.every(isN8nExecutionSummary) &&
+    (page.nextCursor === undefined || page.nextCursor === null || typeof page.nextCursor === "string")
+  )
+}
+
+function throwExecutionListParseError(path: string): never {
+  throw new N8nBuilderError("n8n API returned an invalid executions response.", "N8N_API_PARSE_ERROR", {
+    path,
+    expected: executionListExpected,
   })
 }
 
