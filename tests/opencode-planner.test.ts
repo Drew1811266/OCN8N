@@ -84,6 +84,7 @@ describe("OpencodePlanner", () => {
       sdkReference: "Use n8n workflow rules",
       nodeDocumentation: [{ nodeType: "n8n-nodes-base.webhook", documentation: "Webhook docs" }],
       suggestedNodes: "Use Webhook for inbound events.",
+      compatibilityGuidance: "Node compatibility guidance:\n- n8n-nodes-base.webhook: tier_1_verified",
     })
 
     expect(draft).toEqual(workflowDraft)
@@ -102,6 +103,8 @@ describe("OpencodePlanner", () => {
     expect(promptText).toContain('"required": [')
     expect(promptText).toContain("Suggested node guidance:")
     expect(promptText).toContain("Use Webhook for inbound events.")
+    expect(promptText).toContain("Node compatibility guidance:")
+    expect(promptText).toContain("n8n-nodes-base.webhook: tier_1_verified")
     expect(promptText).toContain("Explain why each selected node type is needed in nodeSelection.")
   })
 
@@ -136,6 +139,7 @@ describe("OpencodePlanner", () => {
       sdkReference: "Use n8n workflow rules",
       nodeDocumentation: [{ nodeType: "n8n-nodes-base.slack", documentation: "Slack docs" }],
       suggestedNodes: "Use Slack for notifications.",
+      compatibilityGuidance: "Node compatibility guidance:\n- n8n-nodes-base.slack: tier_2_modeled",
       currentWorkflowJson: JSON.stringify({ name: "Order webhook" }),
     })
 
@@ -156,6 +160,8 @@ describe("OpencodePlanner", () => {
     expect(promptText).toContain('"nodeSelection"')
     expect(promptText).toContain("Suggested node guidance:")
     expect(promptText).toContain("Use Slack for notifications.")
+    expect(promptText).toContain("Node compatibility guidance:")
+    expect(promptText).toContain("n8n-nodes-base.slack: tier_2_modeled")
     expect(promptText).toContain("Explain why each selected node type is needed in nodeSelection.")
   })
 

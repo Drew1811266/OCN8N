@@ -52,6 +52,7 @@ export type PlannerContext = {
   sdkReference: string
   nodeDocumentation: PlannerNodeDocumentation[]
   suggestedNodes?: string
+  compatibilityGuidance?: string
 }
 
 export type PatchPlannerContext = PlannerContext & {
@@ -178,6 +179,8 @@ export class OpencodePlanner {
       "",
       suggestedNodeGuidance(context),
       "",
+      nodeCompatibilityGuidance(context),
+      "",
       `SDK reference:\n${context.sdkReference}`,
       "",
       `Node documentation:\n${JSON.stringify(context.nodeDocumentation, null, 2)}`,
@@ -200,6 +203,8 @@ export class OpencodePlanner {
       "",
       suggestedNodeGuidance(context),
       "",
+      nodeCompatibilityGuidance(context),
+      "",
       `SDK reference:\n${context.sdkReference}`,
       "",
       `Node documentation:\n${JSON.stringify(context.nodeDocumentation, null, 2)}`,
@@ -212,6 +217,16 @@ function suggestedNodeGuidance(context: PlannerContext): string {
   return suggestedNodes
     ? `Suggested node guidance:\n${suggestedNodes}`
     : "Suggested node guidance:\nNo MCP suggested-node guidance was available."
+}
+
+function nodeCompatibilityGuidance(context: PlannerContext): string {
+  const guidance = context.compatibilityGuidance?.trim()
+  return guidance
+    ? guidance
+    : [
+        "Node compatibility guidance:",
+        "No committed compatibility context was available for the extracted node types.",
+      ].join("\n")
 }
 
 function buildJsonPrompt(text: string, schema: JsonSchema): string {
