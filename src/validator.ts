@@ -27,6 +27,8 @@ export type N8nWorkflow = {
   meta?: Record<string, unknown>
 }
 
+export type WorkflowOwnershipState = "managed_by_opencode" | "managed_by_other" | "unmanaged"
+
 export type WorkflowIssueCode =
   | "DUPLICATE_NODE_NAME"
   | "MISSING_CONNECTION_SOURCE"
@@ -102,14 +104,24 @@ export function validateWorkflowForSave(input: ValidateWorkflowForSaveInput): Va
 }
 
 export function isManagedWorkflow(workflow: N8nWorkflow): boolean {
+  return getWorkflowOwnershipState(workflow) === "managed_by_opencode"
+}
+
+export function getWorkflowOwnershipState(workflow: N8nWorkflow): WorkflowOwnershipState {
   if (workflow.meta?.managedBy === "opencode-n8n-builder") {
-    return true
+    return "managed_by_opencode"
   }
 
-  return (workflow.tags ?? []).some((tag) => {
+  if (typeof workflow.meta?.managedBy === "string" && workflow.meta.managedBy.trim()) {
+    return "managed_by_other"
+  }
+
+  const hasOpenCodeTag = (workflow.tags ?? []).some((tag) => {
     const name = typeof tag === "string" ? tag : tag.name
     return name === "opencode-n8n-builder"
   })
+
+  return hasOpenCodeTag ? "managed_by_opencode" : "unmanaged"
 }
 
 function collectNodeNames(nodes: N8nWorkflowNode[], issues: WorkflowIssue[]): Set<string> {

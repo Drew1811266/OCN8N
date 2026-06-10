@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { stableHash, stableStringify } from "../src/hash.js"
 import { containsPlaintextSecret, isPrivateNetworkUrl, redactSecrets } from "../src/security.js"
-import { isManagedWorkflow, validateWorkflowForSave, type N8nWorkflow } from "../src/validator.js"
+import {
+  getWorkflowOwnershipState,
+  isManagedWorkflow,
+  validateWorkflowForSave,
+  type N8nWorkflow,
+} from "../src/validator.js"
 
 function workflow(overrides: Partial<N8nWorkflow> = {}): N8nWorkflow {
   return {
@@ -182,6 +187,23 @@ describe("validateWorkflowForSave", () => {
 
     expect(result.valid).toBe(true)
     expect(result.warnings.map((warning) => warning.code)).toContain("PRIVATE_NETWORK_HTTP_TARGET")
+  })
+
+  it("reports workflow ownership state from meta and tags", () => {
+    expect(getWorkflowOwnershipState(workflow())).toBe("unmanaged")
+    expect(getWorkflowOwnershipState(workflow({ meta: { managedBy: "opencode-n8n-builder" } }))).toBe(
+      "managed_by_opencode",
+    )
+    expect(getWorkflowOwnershipState(workflow({ tags: [{ name: "opencode-n8n-builder" }] }))).toBe(
+      "managed_by_opencode",
+    )
+    expect(getWorkflowOwnershipState(workflow({ meta: { managedBy: "other-builder" } }))).toBe("managed_by_other")
+  })
+
+  it("keeps isManagedWorkflow true only for opencode ownership", () => {
+    expect(isManagedWorkflow(workflow({ meta: { managedBy: "opencode-n8n-builder" } }))).toBe(true)
+    expect(isManagedWorkflow(workflow({ meta: { managedBy: "other-builder" } }))).toBe(false)
+    expect(isManagedWorkflow(workflow())).toBe(false)
   })
 
   it("enforces managed workflow markers when requested", () => {
