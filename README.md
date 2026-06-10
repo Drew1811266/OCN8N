@@ -338,6 +338,11 @@ flowchart TD
 - 调用 n8n public API 停用 workflow。
 - 刷新本地 registry。
 
+不可用时的 fallback：
+
+- 如果 execution listing API 不可用，readiness 会返回 `diagnostics.supported: false`，用户仍可在 n8n UI 中查看 execution history。
+- 如果 activation/deactivation API 或 API key scope 不可用，插件不会绕过 n8n public API；用户需要在 n8n UI 中手动激活或停用 workflow，之后可再次运行 `preview` 确认状态。
+
 生产检查清单：
 
 - workflow 有本插件托管 marker 或 tag。
