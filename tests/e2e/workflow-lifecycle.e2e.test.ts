@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest"
 import type { N8nBuilderError } from "../../src/errors.js"
 import { buildWorkflow } from "../../src/tools/build-workflow.js"
+import { claimWorkflow } from "../../src/tools/claim-workflow.js"
 import { inspectWorkflow } from "../../src/tools/inspect-workflow.js"
 import { listManagedWorkflows } from "../../src/tools/list-managed-workflows.js"
 import { updateWorkflow } from "../../src/tools/update-workflow.js"
@@ -178,6 +179,108 @@ describe("managed workflow lifecycle E2E", () => {
         }),
       ]),
     )
+  })
+
+  it("claims an external inactive workflow and then updates it", async () => {
+    context = await createE2eContext()
+    const externalWorkflow = await context.api.createWorkflow({
+      name: `${context.runId} external claim`,
+      active: false,
+      nodes: [
+        {
+          name: "Manual Trigger",
+          type: "n8n-nodes-base.manualTrigger",
+          typeVersion: 1,
+          position: [0, 0],
+          parameters: {},
+        },
+        {
+          name: "Set Fields",
+          type: "n8n-nodes-base.set",
+          typeVersion: 3.4,
+          position: [280, 0],
+          parameters: {
+            assignments: {
+              assignments: [
+                {
+                  id: "message",
+                  name: "message",
+                  type: "string",
+                  value: "external workflow",
+                },
+              ],
+            },
+          },
+        },
+      ],
+      connections: {
+        "Manual Trigger": {
+          main: [[{ node: "Set Fields", type: "main", index: 0 }]],
+        },
+      },
+      settings: {},
+      tags: [],
+    })
+    trackWorkflow(context, externalWorkflow.id)
+
+    const preview = await claimWorkflow({
+      args: { workflowId: externalWorkflow.id, mode: "preview" },
+      config: context.config,
+      api: context.api,
+      registry: context.registry,
+      now: deterministicNow("2026-06-10T00:00:00.000Z"),
+    })
+    expect(preview.eligible).toBe(true)
+    expect(preview.action).toBe("claim")
+
+    await expect(
+      inspectWorkflow({
+        args: { workflowId: externalWorkflow.id },
+        baseUrl: context.config.baseUrl,
+        api: context.api,
+        registry: context.registry,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKFLOW_INSPECT_BLOCKED",
+    } satisfies Partial<N8nBuilderError>)
+
+    const apply = await claimWorkflow({
+      args: { workflowId: externalWorkflow.id, mode: "apply", confirm: true },
+      config: context.config,
+      api: context.api,
+      registry: context.registry,
+      now: deterministicNow("2026-06-10T00:01:00.000Z"),
+    })
+    expect(apply.markerWritten).toBe(true)
+    expect(apply.registryWritten).toBe(true)
+
+    const claimedWorkflow = await context.api.getWorkflow(externalWorkflow.id)
+    expect(claimedWorkflow.meta?.managedBy).toBe("opencode-n8n-builder")
+
+    const inspectResult = await inspectWorkflow({
+      args: { workflowId: externalWorkflow.id },
+      baseUrl: context.config.baseUrl,
+      api: context.api,
+      registry: context.registry,
+    })
+    expect(inspectResult.workflowId).toBe(externalWorkflow.id)
+
+    const previewUpdate = await updateWorkflow({
+      args: {
+        workflowId: externalWorkflow.id,
+        mode: "preview",
+        prompt: "Add an IF check after the Set node",
+      },
+      config: context.config,
+      api: context.api,
+      registry: context.registry,
+      previewStore: context.previewStore,
+      planner: deterministicPlanner(),
+      mcp: context.mcp,
+      now: deterministicNow("2026-06-10T00:02:00.000Z"),
+    })
+    expect(previewUpdate.mode).toBe("preview")
+    expect(previewUpdate.previewId).toEqual(expect.any(String))
   })
 
   it("creates the v0.4 low-risk compatibility scenario workflows", async () => {
