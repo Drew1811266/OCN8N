@@ -95,4 +95,41 @@ describe("release documentation", () => {
     expect(workflow).toContain("npm run build")
     expect(workflow).toContain("npm run package:check")
   })
+
+  it("documents the v1 public contract, compatibility, and security review", async () => {
+    const publicContract = await readFile("docs/public-contract.md", "utf8")
+    const compatibility = await readFile("docs/compatibility.md", "utf8")
+    const security = await readFile("docs/security-review.md", "utf8")
+
+    for (const tool of tools) {
+      expect(publicContract).toContain(tool)
+    }
+
+    for (const term of [
+      "BuildWorkflowResult",
+      "UpdateWorkflowResult",
+      "ClaimWorkflowResult",
+      "CheckWorkflowReadinessResult",
+      "WorkflowRegistryRecord",
+      "UpdatePreview",
+      "N8nBuilderError",
+    ]) {
+      expect(publicContract).toContain(term)
+    }
+
+    for (const term of ["tier_1_verified", "tier_2_modeled", "tier_3_dynamic", "n8n 2.20.0", "n8n 2.23.4"]) {
+      expect(compatibility).toContain(term)
+    }
+
+    for (const term of [
+      "No silent active workflow writes",
+      "No plaintext secrets in persisted artifacts",
+      "stale preview",
+      "rollback",
+      "redaction",
+      "Residual risks",
+    ]) {
+      expect(security).toContain(term)
+    }
+  })
 })
