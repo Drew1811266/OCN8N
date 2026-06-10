@@ -177,6 +177,53 @@ describe("N8nApiClient", () => {
     })
   })
 
+  it("redacts nested response details when n8n rejects a request", async () => {
+    const fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          message: "Invalid credential",
+          data: {
+            authorization: "Bearer secret-token",
+            token: "api-secret",
+            nested: [{ accessToken: "xoxb-secret-token" }],
+            hint: "Check credential setup.",
+          },
+        }),
+        { status: 400 },
+      )
+    })
+    const client = new N8nApiClient({
+      baseUrl: "https://demo.app.n8n.cloud/api/v1",
+      apiKey: "bad_key",
+      fetch,
+    })
+
+    let error: unknown
+    try {
+      await client.createCredential({ name: "OpenCode Slack", type: "slackApi", data: { accessToken: "secret" } })
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toBeInstanceOf(N8nBuilderError)
+    expect((error as N8nBuilderError).details).toEqual({
+      status: 400,
+      path: "/credentials",
+      response: {
+        message: "Invalid credential",
+        data: {
+          authorization: "[REDACTED]",
+          token: "[REDACTED]",
+          nested: [{ accessToken: "[REDACTED]" }],
+          hint: "Check credential setup.",
+        },
+      },
+    })
+    expect(JSON.stringify(error)).not.toContain("bad_key")
+    expect(JSON.stringify(error)).not.toContain("secret-token")
+    expect(JSON.stringify(error)).not.toContain("api-secret")
+  })
+
   it("lists workflows from paginated n8n API responses", async () => {
     const fetch = vi
       .fn()

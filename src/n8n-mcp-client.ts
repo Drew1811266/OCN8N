@@ -1,4 +1,5 @@
 import { N8nBuilderError } from "./errors.js"
+import { redactSecrets } from "./security.js"
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
@@ -18,6 +19,7 @@ type McpResponse = {
   error?: {
     code: number
     message: string
+    data?: unknown
   }
 }
 
@@ -157,6 +159,9 @@ export class N8nMcpClient {
       if (typeof mcpResponse.error.code === "number") {
         details.errorCode = mcpResponse.error.code
       }
+      if (Object.hasOwn(mcpResponse.error, "data")) {
+        details.data = redactSecrets(mcpResponse.error.data)
+      }
 
       throw new N8nBuilderError(`n8n MCP tool ${toolName} failed.`, "N8N_MCP_TOOL_ERROR", details)
     }
@@ -236,6 +241,7 @@ function parseMcpResponse(value: unknown): McpResponse {
       error: {
         code: value.error.code,
         message: value.error.message,
+        ...(Object.hasOwn(value.error, "data") ? { data: value.error.data } : {}),
       },
     }
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { stableHash, stableStringify } from "../src/hash.js"
-import { containsPlaintextSecret, isPrivateNetworkUrl } from "../src/security.js"
+import { containsPlaintextSecret, isPrivateNetworkUrl, redactSecrets } from "../src/security.js"
 import { isManagedWorkflow, validateWorkflowForSave, type N8nWorkflow } from "../src/validator.js"
 
 function workflow(overrides: Partial<N8nWorkflow> = {}): N8nWorkflow {
@@ -60,6 +60,42 @@ describe("security checks", () => {
   it("does not flag public URL hosts", () => {
     expect(isPrivateNetworkUrl("https://api.example.com")).toBe(false)
     expect(isPrivateNetworkUrl("http://172.32.0.1/api")).toBe(false)
+  })
+
+  it("redacts nested secret-looking keys without mutating the original value", () => {
+    const input = {
+      message: "Unauthorized",
+      details: {
+        token: "secret-token",
+        credentials: {
+          clientSecret: "client-secret",
+          safe: "visible",
+        },
+      },
+    }
+
+    expect(redactSecrets(input)).toEqual({
+      message: "Unauthorized",
+      details: {
+        token: "[REDACTED]",
+        credentials: {
+          clientSecret: "[REDACTED]",
+          safe: "visible",
+        },
+      },
+    })
+    expect(input.details.token).toBe("secret-token")
+    expect(input.details.credentials.clientSecret).toBe("client-secret")
+  })
+
+  it("redacts bearer and Slack token-looking strings inside arrays", () => {
+    expect(
+      redactSecrets({
+        errors: ["Authorization: Bearer secret-token", "Slack token xoxb-secret-token", "plain message"],
+      }),
+    ).toEqual({
+      errors: ["[REDACTED]", "[REDACTED]", "plain message"],
+    })
   })
 })
 

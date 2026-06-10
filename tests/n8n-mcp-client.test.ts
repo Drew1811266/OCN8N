@@ -105,6 +105,49 @@ describe("N8nMcpClient", () => {
     })
   })
 
+  it("redacts JSON-RPC error data before exposing MCP failures", async () => {
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          error: {
+            code: -32000,
+            message: "Tool failed",
+            data: {
+              headers: { authorization: "Bearer mcp-secret-token" },
+              token: "tool-secret",
+              safe: "Node type not found.",
+            },
+          },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new N8nMcpClient({ mcpUrl: "https://demo/mcp", authToken: "client-secret", fetch })
+
+    let error: unknown
+    try {
+      await client.searchNodes("slack")
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toBeInstanceOf(N8nBuilderError)
+    expect((error as N8nBuilderError).details).toEqual({
+      toolName: "search_nodes",
+      errorCode: -32000,
+      data: {
+        headers: { authorization: "[REDACTED]" },
+        token: "[REDACTED]",
+        safe: "Node type not found.",
+      },
+    })
+    expect(JSON.stringify(error)).not.toContain("mcp-secret-token")
+    expect(JSON.stringify(error)).not.toContain("tool-secret")
+    expect(JSON.stringify(error)).not.toContain("client-secret")
+  })
+
   it("calls search_nodes with queries array", async () => {
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
       return new Response(

@@ -1,7 +1,21 @@
-const SECRET_KEYS = new Set(["apikey", "token", "password", "secret", "clientsecret", "accesstoken", "refreshtoken"])
+const SECRET_KEYS = new Set([
+  "apikey",
+  "authorization",
+  "token",
+  "password",
+  "secret",
+  "clientsecret",
+  "accesstoken",
+  "refreshtoken",
+])
+const redactedValue = "[REDACTED]"
 
 export function containsPlaintextSecret(value: unknown): boolean {
   return scanValue(value)
+}
+
+export function redactSecrets(value: unknown): unknown {
+  return redactValue(value, undefined)
 }
 
 export function isPrivateNetworkUrl(raw: string): boolean {
@@ -60,6 +74,35 @@ function scanValue(value: unknown): boolean {
 function isSecretKey(key: string): boolean {
   const normalized = key.replace(/[\s_-]/g, "").toLowerCase()
   return SECRET_KEYS.has(normalized)
+}
+
+function redactValue(value: unknown, key: string | undefined): unknown {
+  if (key && isSecretKey(key)) {
+    return redactedValue
+  }
+
+  if (typeof value === "string") {
+    return isSecretString(value) ? redactedValue : value
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactValue(item, undefined))
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => [
+        childKey,
+        redactValue(childValue, childKey),
+      ]),
+    )
+  }
+
+  return value
+}
+
+function isSecretString(value: string): boolean {
+  return /\bBearer\s+[A-Za-z0-9._~+/=:-]+/i.test(value) || /\bxox[baprs]-[A-Za-z0-9-]+/i.test(value)
 }
 
 function hasPlaintextString(value: unknown): boolean {

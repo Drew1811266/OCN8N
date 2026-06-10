@@ -1,4 +1,5 @@
 import { N8nBuilderError } from "./errors.js"
+import { redactSecrets } from "./security.js"
 import type { N8nWorkflow } from "./validator.js"
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -156,10 +157,7 @@ export class N8nApiClient {
       throw new N8nBuilderError(
         `n8n API request failed with status ${response.status} for ${path}.`,
         "N8N_API_ERROR",
-        {
-          status: response.status,
-          path,
-        },
+        await apiErrorDetails(response, path),
       )
     }
 
@@ -184,12 +182,42 @@ export class N8nApiClient {
       throw new N8nBuilderError(
         `n8n API request failed with status ${response.status} for ${path}.`,
         "N8N_API_ERROR",
-        {
-          status: response.status,
-          path,
-        },
+        await apiErrorDetails(response, path),
       )
     }
+  }
+}
+
+async function apiErrorDetails(response: Response, path: string): Promise<Record<string, unknown>> {
+  const details: Record<string, unknown> = {
+    status: response.status,
+    path,
+  }
+  const responseDetails = await safeErrorResponse(response)
+
+  if (responseDetails !== undefined) {
+    details.response = responseDetails
+  }
+
+  return details
+}
+
+async function safeErrorResponse(response: Response): Promise<unknown> {
+  let text: string
+  try {
+    text = await response.text()
+  } catch {
+    return undefined
+  }
+
+  if (!text.trim()) {
+    return undefined
+  }
+
+  try {
+    return redactSecrets(JSON.parse(text))
+  } catch {
+    return redactSecrets(text)
   }
 }
 
