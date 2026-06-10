@@ -68,16 +68,19 @@ describe("release documentation", () => {
     }
   })
 
-  it("documents v0.9 in README and changelog", async () => {
+  it("documents v1 in README and changelog", async () => {
     const readme = await readFile("README.md", "utf8")
     const changelog = await readFile("CHANGELOG.md", "utf8")
 
-    expect(readme).toContain("当前版本：`0.9.0`")
+    expect(readme).toContain("当前版本：`1.0.0`")
     expect(readme).toContain("docs/installation.md")
     expect(readme).toContain("docs/release-checklist.md")
-    expect(changelog).toContain("## 0.9.0")
+    expect(readme).toContain("docs/public-contract.md")
+    expect(readme).toContain("docs/compatibility.md")
+    expect(readme).toContain("docs/security-review.md")
+    expect(changelog).toContain("## 1.0.0")
 
-    for (const version of ["0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0", "0.2.0", "0.1.0"]) {
+    for (const version of ["0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0", "0.2.0", "0.1.0"]) {
       expect(changelog).toContain(`## ${version}`)
     }
   })

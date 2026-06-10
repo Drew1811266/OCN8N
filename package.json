@@ -1,6 +1,6 @@
 {
   "name": "opencode-n8n-builder",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "description": "OpenCode plugin for creating, iterating, validating, and operating managed n8n workflows.",
   "type": "module",
   "main": "./dist/index.js",

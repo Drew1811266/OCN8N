@@ -11,6 +11,16 @@
 - [ ] `git diff --check` 无输出。
 - [ ] Docker 可用环境中运行 `N8N_E2E_API_KEY=<key> npm run test:e2e`，或明确记录 Docker 不可用诊断。
 
+## v1.0 Release Candidate Review
+
+- [ ] `README.md` 当前版本为 `1.0.0`，并描述实际行为而不是未来目标。
+- [ ] `CHANGELOG.md` 包含 `## 1.0.0`。
+- [ ] `docs/public-contract.md` 覆盖工具、结果、错误、warning、registry 和 preview 合同。
+- [ ] `docs/compatibility.md` 覆盖 Node、OpenCode、n8n、MCP、节点 tier 和 credential flow。
+- [ ] `docs/security-review.md` 记录无已知 critical safety blocker。
+- [ ] package entrypoint 导出公开类型，`tests/public-contract.test.ts` 通过。
+- [ ] GitHub token 具备 `workflow` scope，或明确记录 `.github/workflows/check.yml` 无法推送的授权阻断。
+
 ## Pack Review
 
 - [ ] 在有 npm 的 shell 中运行 `npm pack --dry-run --json`。

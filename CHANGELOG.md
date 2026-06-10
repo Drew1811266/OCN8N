@@ -2,6 +2,14 @@
 
 All notable changes for `opencode-n8n-builder` are documented here.
 
+## 1.0.0
+
+- Exported public TypeScript contract types from the package entrypoint.
+- Documented stable tool, result, registry, preview, warning, and error contracts.
+- Added compatibility documentation for n8n, OpenCode, MCP, node tiers, and credential flows.
+- Added v1.0 security review record and residual risk documentation.
+- Updated release metadata and docs for the stable release candidate.
+
 ## 0.9.0
 
 - Added release-readiness package metadata: repository, bugs, homepage, Node engine, expanded package files, and `package:check`.
