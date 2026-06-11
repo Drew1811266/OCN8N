@@ -46,6 +46,7 @@
 - [ ] `docs/compatibility.md` 覆盖七个 pattern family：`trigger`、`transform`、`branch`、`loop_batch`、`error_handling`、`external_call`、`output`。
 - [ ] `docs/security-review.md` 记录 no silent n8n writes、no active workflow structural apply、no silent migration from v1 artifacts、no execution-history sampling without opt-in、no trial run without opt-in，以及 v2-claimed inactive workflow update apply 的 stale-hash 防护。
 - [ ] `tests/plugin.test.ts`、`tests/public-contract.test.ts`、`tests/package-metadata.test.ts` 和 `tests/docs-release.test.ts` 通过。
+- [ ] `tests/e2e/plugin-smoke.e2e.test.ts` 在 Docker/API key 可用时覆盖 v2 complex auto preview、dry-run trial 和 inactive apply path。
 
 ## Pack Review
 

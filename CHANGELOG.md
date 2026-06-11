@@ -14,6 +14,7 @@ All notable changes for `opencode-n8n-builder` are documented here.
 - Added optional MCP `validate_workflow` after v2 compile preview with persisted `mcpValidationStatus`, warning propagation, and failure blocking.
 - Added optional `workflowId` update preview mode for `n8n_v2_compile_preview`, returning persisted structured diff metadata for v2-claimed inactive workflow updates.
 - Enriched `V2PreviewMappingTrace` with business intent, node parameter paths, expressions, source fields, and output fields.
+- Updated opt-in Docker E2E plugin smoke coverage for the v2 default surface, complex auto preview, dry-run trial, and inactive apply path.
 - Added release-gate docs for v1-to-v2 migration and the v2 pattern compatibility matrix.
 - v1 artifacts are not silently migrated; users must use v2 claim/import for old workflows.
 

@@ -23,52 +23,12 @@ function parseOutput(value: unknown): unknown {
   return JSON.parse((value as { output: string }).output)
 }
 
-function workflowUrl(baseUrl: string, workflowId: string): string {
-  return baseUrl.replace(/\/api\/v\d+\/?$/i, `/workflow/${workflowId}`)
-}
-
 describe("plugin E2E smoke", () => {
-  it("registers tools and executes list and inspect against an E2E workspace", async () => {
+  it("runs a complex v2 preview, dry-run trial, and inactive apply against an E2E workspace", async () => {
     const context = await createE2eContext()
 
     try {
-      const created = await context.api.createWorkflow({
-        name: `${context.runId} plugin smoke`,
-        active: false,
-        nodes: [
-          {
-            id: "manual-trigger",
-            name: "Manual Trigger",
-            type: "n8n-nodes-base.manualTrigger",
-            typeVersion: 1,
-            position: [0, 0],
-            parameters: {},
-          },
-        ],
-        connections: {},
-        settings: { executionOrder: "v1" },
-        meta: {
-          managedBy: "opencode-n8n-builder",
-          managedByVersion: "0.3.0-e2e",
-          createdAt: "2026-06-08T00:00:00.000Z",
-        },
-      })
-      trackWorkflow(context, created.id)
-      const createdWorkflow = await context.api.getWorkflow(created.id)
-      expect(createdWorkflow.active).toBe(false)
-
-      await context.registry.upsert({
-        workflowId: created.id,
-        name: created.name,
-        url: workflowUrl(context.config.baseUrl, created.id),
-        baseUrl: context.config.baseUrl,
-        managedBy: "opencode-n8n-builder",
-        managedByVersion: "0.3.0-e2e",
-        lastPlanHash: "plugin-smoke",
-        lastUpdatedAt: "2026-06-08T00:00:00.000Z",
-      })
-
-      const plugin = createN8nBuilderPlugin({ version: "0.3.0-e2e" })
+      const plugin = createN8nBuilderPlugin({ version: "2.0.0-e2e" })
       const result = await plugin(
         pluginInput(context.workspaceDir, {
           n8n: {
@@ -81,29 +41,78 @@ describe("plugin E2E smoke", () => {
       )
 
       expect(Object.keys(result.tool ?? {})).toEqual([
-        "n8n_build_workflow",
-        "n8n_update_workflow",
-        "n8n_claim_workflow",
-        "n8n_check_workflow_readiness",
-        "n8n_inspect_workflow",
-        "n8n_list_managed_workflows",
+        "n8n_v2_auto_preview",
+        "n8n_v2_create_plan",
+        "n8n_v2_review_plan",
+        "n8n_v2_patch_plan",
+        "n8n_v2_validate_simulate",
+        "n8n_v2_compile_preview",
+        "n8n_v2_apply",
+        "n8n_v2_claim_workflow",
+        "n8n_v2_reverse_plan",
+        "n8n_v2_run_trial",
       ])
 
-      const listed = parseOutput(await result.tool?.n8n_list_managed_workflows.execute({}, {} as never))
-      expect(listed).toEqual(
+      const preview = parseOutput(
+        await result.tool?.n8n_v2_auto_preview.execute(
+          {
+            prompt:
+              "Create a webhook order workflow that maps fields, filters invalid orders, branches by status with a default path, processes each item in batches, and responds to the webhook.",
+            name: `${context.runId} v2 complex orders`,
+          },
+          {} as never,
+        ),
+      ) as { previewId: string; planVersion: number; validationStatus: string; nodeCount: number; mappingTrace: unknown[] }
+      expect(preview).toEqual(
         expect.objectContaining({
-          workflows: expect.arrayContaining([expect.objectContaining({ workflowId: created.id })]),
+          planVersion: 1,
+          validationStatus: "passed",
+          nodeCount: expect.any(Number),
+        }),
+      )
+      expect(preview.mappingTrace.length).toBeGreaterThan(0)
+
+      const trial = parseOutput(
+        await result.tool?.n8n_v2_run_trial.execute(
+          {
+            previewId: preview.previewId,
+            mode: "dry_run",
+            confirm: true,
+            sampleName: "valid order",
+          },
+          {} as never,
+        ),
+      ) as { previewId: string; status: string; triggered: boolean; executionMode: string }
+      expect(trial).toEqual(
+        expect.objectContaining({
+          previewId: preview.previewId,
+          status: "passed",
+          triggered: false,
+          executionMode: "not_triggered",
         }),
       )
 
-      const inspected = parseOutput(
-        await result.tool?.n8n_inspect_workflow.execute({ workflowId: created.id }, {} as never),
-      )
-      expect(inspected).toEqual(
+      const applied = parseOutput(
+        await result.tool?.n8n_v2_apply.execute(
+          {
+            previewId: preview.previewId,
+            confirm: true,
+          },
+          {} as never,
+        ),
+      ) as { workflowId: string; mode: string; validationStatus: string }
+      trackWorkflow(context, applied.workflowId)
+      expect(applied).toEqual(
         expect.objectContaining({
-          workflowId: created.id,
-          name: created.name,
+          mode: "create",
+          validationStatus: "passed",
         }),
+      )
+
+      const appliedWorkflow = await context.api.getWorkflow(applied.workflowId)
+      expect(appliedWorkflow.active).toBe(false)
+      expect(appliedWorkflow.tags).toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: "opencode-n8n-builder-v2" })]),
       )
     } finally {
       await cleanupE2eContext(context)

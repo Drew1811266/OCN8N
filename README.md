@@ -741,7 +741,7 @@ npm run build
 
 ## 真实 n8n 实例验证（v0.2+）
 
-v0.2 增加了一个显式触发的 E2E 验证层，用本地 Docker n8n 实例验证插件的核心生命周期。v0.3 在该 E2E 层中继续覆盖 MCP `get_suggested_nodes`、`validate_workflow` 和 draft planner 路径。v0.4 继续扩展低风险节点兼容性场景。v0.5 补充 credential setup UX 和错误脱敏的默认测试。v0.6 增加已有 inactive workflow 的 claim/import 场景。v0.7 增加结构化 diff、preview base/proposed 持久化和 rollback 的默认单元测试。v0.8 增加 readiness、activation/deactivation 和 runtime diagnostics 的默认单元测试。默认的 `npm test` 不会启动 Docker，也不要求真实 n8n。
+v0.2 增加了一个显式触发的 E2E 验证层，用本地 Docker n8n 实例验证插件的核心生命周期。v0.3 在该 E2E 层中继续覆盖 MCP `get_suggested_nodes`、`validate_workflow` 和 draft planner 路径。v0.4 继续扩展低风险节点兼容性场景。v0.5 补充 credential setup UX 和错误脱敏的默认测试。v0.6 增加已有 inactive workflow 的 claim/import 场景。v0.7 增加结构化 diff、preview base/proposed 持久化和 rollback 的默认单元测试。v0.8 增加 readiness、activation/deactivation 和 runtime diagnostics 的默认单元测试。v2.0 的 opt-in plugin smoke E2E 覆盖默认 v2 tool surface、complex auto preview、dry-run trial 和 inactive apply path。默认的 `npm test` 不会启动 Docker，也不要求真实 n8n。
 
 前置条件：
 
