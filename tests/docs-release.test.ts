@@ -156,6 +156,8 @@ describe("release documentation", () => {
       "v2-claimed inactive workflow",
       "MCP validation after compile",
       "mcpValidationStatus",
+      "diff when updating a claimed inactive workflow",
+      "updateTarget",
     ]) {
       expect(publicContract).toContain(term)
     }

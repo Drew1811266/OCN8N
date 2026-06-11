@@ -75,6 +75,7 @@ Compiles a validated plan version into an inactive n8n workflow preview.
 - Result type: `V2CompilePreviewResult`
 - Writes: `.opencode/n8n-v2/previews/<previewId>.json`
 - Safety: validates and simulates before compile; preview workflow is inactive and marked `opencode-n8n-builder-v2`; compiler emits `V2PreviewMappingTrace`; MCP validation after compile runs when `N8N_MCP_URL` or `n8n.mcpUrl` is configured.
+- Update diff: when optional `workflowId` is supplied, compile preview reads the v2-claimed inactive workflow and returns a diff when updating a claimed inactive workflow in `updateTarget`. This mode requires API config, a full v2 claim, matching base URL, inactive current workflow, and matching registry workflow hash.
 - MCP validation: `mcpValidationStatus` is `not_configured`, `passed`, or `warning`. MCP validation warnings are merged into `warnings`; `MCP_WORKFLOW_VALIDATION_FAILED` blocks preview persistence.
 
 ### `n8n_v2_apply`
@@ -117,13 +118,14 @@ Runs a confirm-gated dry-run trial for a compiled preview.
 
 - `V2CreatePlanResult`: plan ID/version, summary, pattern count, confidence, risk level, and warnings.
 - `V2AutoPreviewResult`: plan metadata, preview ID, review, simulation, mapping trace, confidence, risk level, `mcpValidationStatus`, and warnings.
-- `V2CompilePreviewResult`: preview ID, plan reference, workflow name, node count, workflow hash, validation status, `mcpValidationStatus`, mapping trace, and warnings.
+- `V2CompilePreviewResult`: preview ID, plan reference, workflow name, node count, workflow hash, validation status, `mcpValidationStatus`, optional `updateTarget`, mapping trace, and warnings.
 - `V2ApplyResult`: created or updated workflow ID, URL, `mode: "create" | "update"`, preview reference, plan reference, node count, workflow hash, validation status, and warnings.
 - `V2ClaimWorkflowResult`: claim action, eligibility, claim mode, active state, workflow summary, risks, marker/registry write status, and workflow hash.
 - `V2ReversePlanResult`: reverse plan ID/version, confidence, risk level, mapped step count, unmapped nodes, warnings, and workflow hash.
 - `V2RunTrialResult`: run ID, preview and plan reference, dry-run status, `triggered: false`, execution mode, cleanup flag, warnings, and summary.
 - `V2RegistryRecord`: v2 registry ownership record with `managedBy: "opencode-n8n-builder-v2"`, claim mode, active-at-claim flag, latest plan/preview metadata, and last update timestamp.
-- `V2CompiledPreview`: immutable local preview artifact with workflow JSON, workflow hash, validation status, `mcpValidationStatus`, warnings, and `V2PreviewMappingTrace[]`.
+- `V2CompiledPreview`: immutable local preview artifact with workflow JSON, workflow hash, validation status, `mcpValidationStatus`, optional `updateTarget`, warnings, and `V2PreviewMappingTrace[]`.
+- `V2PreviewUpdateTarget`: update preview metadata with target workflow ID, current workflow hash, `hasChanges`, and structured `V2WorkflowDiff`.
 - `V2TrialRunArtifact`: immutable local dry-run artifact with simulation result, provenance, warnings, timing, and non-triggered execution metadata.
 - `V2ArtifactPaths`: isolated v2 artifact paths under `.opencode/n8n-v2/`.
 
@@ -158,6 +160,10 @@ Known v2 codes include:
 - `V2_CLAIM_CONFIRM_REQUIRED`
 - `V2_WORKFLOW_NOT_CLAIMED`
 - `V2_REGISTRY_BASE_URL_MISMATCH`
+- `V2_COMPILE_UPDATE_UNSUPPORTED`
+- `V2_COMPILE_UPDATE_READ_ONLY_CLAIM`
+- `V2_COMPILE_UPDATE_ACTIVE_WORKFLOW`
+- `V2_COMPILE_UPDATE_STALE`
 - `V2_TRIAL_CONFIRM_REQUIRED`
 - `V2_TRIAL_SAMPLE_NOT_FOUND`
 - `MCP_WORKFLOW_VALIDATION_FAILED`

@@ -32,6 +32,7 @@
 - [ ] 默认插件入口只暴露 `n8n_v2_patch_plan`。
 - [ ] 默认插件入口只暴露 `n8n_v2_validate_simulate`。
 - [ ] 默认插件入口只暴露 `n8n_v2_compile_preview`。
+- [ ] `n8n_v2_compile_preview` 支持可选 `workflowId` update preview diff，并在 active/read-only/stale/base URL mismatch 时阻断。
 - [ ] 默认插件入口只暴露 `n8n_v2_apply`。
 - [ ] 默认插件入口只暴露 `n8n_v2_claim_workflow`。
 - [ ] 默认插件入口只暴露 `n8n_v2_reverse_plan`。

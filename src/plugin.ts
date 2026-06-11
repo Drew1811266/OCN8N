@@ -42,12 +42,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
         workspaceDir: directory,
         pluginVersion: version,
       })
-      const mcp = config.mcpUrl
-        ? new N8nMcpClient({
-            mcpUrl: config.mcpUrl,
-            authToken: config.mcpToken,
-          })
-        : undefined
+      const mcp = mcpFromConfig(config)
 
       return {
         config,
@@ -70,10 +65,12 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
       })
+      const mcp = mcpFromConfig(config)
 
       return {
         config,
         api,
+        mcp,
         v2PlanStore: new V2PlanStore(config.v2.plansDir),
         v2PreviewStore: new V2PreviewStore(config.v2.previewsDir),
         v2Registry: new V2WorkflowRegistry(config.v2.registryPath),
@@ -177,8 +174,25 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
           args: {
             planId: tool.schema.string().min(1),
             planVersion: tool.schema.number().int().min(1),
+            workflowId: tool.schema.string().optional(),
           },
           async execute(args) {
+            if (args.workflowId) {
+              const resolved = await apiDeps()
+              const result = await compileV2Preview({
+                args,
+                planStore: resolved.v2PlanStore,
+                previewStore: resolved.v2PreviewStore,
+                pluginVersion: resolved.config.pluginVersion,
+                config: { baseUrl: resolved.config.baseUrl },
+                api: resolved.api,
+                registry: resolved.v2Registry,
+                mcp: resolved.mcp,
+              })
+
+              return jsonOutput("v2 n8n workflow update preview compiled", result)
+            }
+
             const resolved = await localDeps()
             const result = await compileV2Preview({
               args,
@@ -326,6 +340,15 @@ function jsonOutput(title: string, result: unknown): ToolResult {
     title,
     output: JSON.stringify(result, null, 2),
   }
+}
+
+function mcpFromConfig(config: { mcpUrl?: string; mcpToken?: string }) {
+  return config.mcpUrl
+    ? new N8nMcpClient({
+        mcpUrl: config.mcpUrl,
+        authToken: config.mcpToken,
+      })
+    : undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

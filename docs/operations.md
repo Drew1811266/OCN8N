@@ -76,8 +76,9 @@
 
 - `planId`：必填。
 - `planVersion`：必填。
+- `workflowId`：可选。提供时生成针对该 v2-claimed inactive workflow 的 update preview diff。
 
-行为：编译 workflow JSON，写入 `opencode-n8n-builder-v2` marker，生成 `V2PreviewMappingTrace`，保存 preview artifact。如果配置了 `N8N_MCP_URL` 或 OpenCode config 的 `n8n.mcpUrl`，保存前会调用 MCP `validate_workflow`；返回的 `mcpValidationStatus` 为 `passed`、`warning` 或 `not_configured`。MCP warning 会进入 `warnings`，MCP validation failure 会阻止 preview 保存。
+行为：编译 workflow JSON，写入 `opencode-n8n-builder-v2` marker，生成 `V2PreviewMappingTrace`，保存 preview artifact。如果配置了 `N8N_MCP_URL` 或 OpenCode config 的 `n8n.mcpUrl`，保存前会调用 MCP `validate_workflow`；返回的 `mcpValidationStatus` 为 `passed`、`warning` 或 `not_configured`。MCP warning 会进入 `warnings`，MCP validation failure 会阻止 preview 保存。提供 `workflowId` 时会读取 v2 registry 和当前 n8n workflow，要求 full claim、base URL 匹配、当前 workflow inactive 且 registry hash 未过期，然后在 `updateTarget.diff` 中返回结构化差异。
 
 写操作：写 `.opencode/n8n-v2/previews/<previewId>.json`，不写 n8n。
 

@@ -16,6 +16,56 @@ export type V2PreviewMappingTrace = {
 
 export type V2McpValidationStatus = "not_configured" | "passed" | "warning"
 
+export type V2WorkflowNodeDiff = {
+  nodeName: string
+  nodeType: string
+}
+
+export type V2NodeParameterDiff = {
+  nodeName: string
+  path: string
+  before: unknown
+  after: unknown
+}
+
+export type V2NodeCredentialDiff = {
+  nodeName: string
+  credentialType: string
+  beforeName?: string
+  afterName?: string
+}
+
+export type V2ConnectionDiff = {
+  source: string
+  before: unknown
+  after: unknown
+}
+
+export type V2SettingDiff = {
+  path: string
+  before: unknown
+  after: unknown
+}
+
+export type V2WorkflowDiff = {
+  addedNodes: V2WorkflowNodeDiff[]
+  removedNodes: V2WorkflowNodeDiff[]
+  changedNodeParameters: V2NodeParameterDiff[]
+  changedCredentials: V2NodeCredentialDiff[]
+  changedConnections: V2ConnectionDiff[]
+  changedSettings: V2SettingDiff[]
+}
+
+export type V2PreviewUpdateTarget = {
+  workflowId: string
+  name: string
+  url: string
+  currentWorkflowHash: string
+  registryWorkflowHash?: string
+  hasChanges: boolean
+  diff: V2WorkflowDiff
+}
+
 export type V2CompiledPreview = {
   previewId: string
   planId: string
@@ -25,6 +75,7 @@ export type V2CompiledPreview = {
   mappingTrace: V2PreviewMappingTrace[]
   validationStatus: V2SimulationResult["status"]
   mcpValidationStatus: V2McpValidationStatus
+  updateTarget?: V2PreviewUpdateTarget
   warnings: V2Warning[]
   createdAt: string
 }
@@ -115,6 +166,7 @@ function isV2CompiledPreview(value: unknown): value is V2CompiledPreview {
     isArrayOf(value.mappingTrace, isV2PreviewMappingTrace) &&
     (value.validationStatus === "passed" || value.validationStatus === "failed" || value.validationStatus === "warning") &&
     isV2McpValidationStatus(value.mcpValidationStatus) &&
+    (value.updateTarget === undefined || isV2PreviewUpdateTarget(value.updateTarget)) &&
     isArrayOf(value.warnings, isV2Warning) &&
     typeof value.createdAt === "string"
   )
@@ -122,6 +174,73 @@ function isV2CompiledPreview(value: unknown): value is V2CompiledPreview {
 
 function isV2McpValidationStatus(value: unknown): value is V2McpValidationStatus {
   return value === "not_configured" || value === "passed" || value === "warning"
+}
+
+function isV2PreviewUpdateTarget(value: unknown): value is V2PreviewUpdateTarget {
+  return (
+    isRecord(value) &&
+    typeof value.workflowId === "string" &&
+    typeof value.name === "string" &&
+    typeof value.url === "string" &&
+    typeof value.currentWorkflowHash === "string" &&
+    (value.registryWorkflowHash === undefined || typeof value.registryWorkflowHash === "string") &&
+    typeof value.hasChanges === "boolean" &&
+    isV2WorkflowDiff(value.diff)
+  )
+}
+
+function isV2WorkflowDiff(value: unknown): value is V2WorkflowDiff {
+  return (
+    isRecord(value) &&
+    isArrayOf(value.addedNodes, isV2WorkflowNodeDiff) &&
+    isArrayOf(value.removedNodes, isV2WorkflowNodeDiff) &&
+    isArrayOf(value.changedNodeParameters, isV2NodeParameterDiff) &&
+    isArrayOf(value.changedCredentials, isV2NodeCredentialDiff) &&
+    isArrayOf(value.changedConnections, isV2ConnectionDiff) &&
+    isArrayOf(value.changedSettings, isV2SettingDiff)
+  )
+}
+
+function isV2WorkflowNodeDiff(value: unknown): value is V2WorkflowNodeDiff {
+  return isRecord(value) && typeof value.nodeName === "string" && typeof value.nodeType === "string"
+}
+
+function isV2NodeParameterDiff(value: unknown): value is V2NodeParameterDiff {
+  return (
+    isRecord(value) &&
+    typeof value.nodeName === "string" &&
+    typeof value.path === "string" &&
+    Object.hasOwn(value, "before") &&
+    Object.hasOwn(value, "after")
+  )
+}
+
+function isV2NodeCredentialDiff(value: unknown): value is V2NodeCredentialDiff {
+  return (
+    isRecord(value) &&
+    typeof value.nodeName === "string" &&
+    typeof value.credentialType === "string" &&
+    (value.beforeName === undefined || typeof value.beforeName === "string") &&
+    (value.afterName === undefined || typeof value.afterName === "string")
+  )
+}
+
+function isV2ConnectionDiff(value: unknown): value is V2ConnectionDiff {
+  return (
+    isRecord(value) &&
+    typeof value.source === "string" &&
+    Object.hasOwn(value, "before") &&
+    Object.hasOwn(value, "after")
+  )
+}
+
+function isV2SettingDiff(value: unknown): value is V2SettingDiff {
+  return (
+    isRecord(value) &&
+    typeof value.path === "string" &&
+    Object.hasOwn(value, "before") &&
+    Object.hasOwn(value, "after")
+  )
 }
 
 function isV2PreviewMappingTrace(value: unknown): value is V2PreviewMappingTrace {

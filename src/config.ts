@@ -35,7 +35,8 @@ export type LocalPluginConfig = Pick<
 > &
   Partial<Pick<PluginConfig, "mcpUrl" | "mcpToken">>
 
-export type ApiPluginConfig = Omit<PluginConfig, "mcpUrl" | "mcpToken">
+export type ApiPluginConfig = Omit<PluginConfig, "mcpUrl" | "mcpToken"> &
+  Partial<Pick<PluginConfig, "mcpUrl" | "mcpToken">>
 
 const optionalStringFields = ["baseUrl", "apiKey", "mcpUrl", "mcpToken", "projectId", "folderId"] as const
 const credentialAuthModes = new Set(["api_key", "oauth2", "manual"])
@@ -214,7 +215,7 @@ export function loadApiPluginConfig(input: LoadPluginConfigInput): ApiPluginConf
   ])
 
   return {
-    ...localConfigFromInput(input, n8n),
+    ...localConfigFromInput(input, n8n, { includeMcp: true }),
     baseUrl: baseUrl as string,
     apiKey: apiKey as string,
   }

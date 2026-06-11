@@ -104,7 +104,7 @@ describe("plugin exports", () => {
     expect(Object.keys(result.tool?.n8n_v2_review_plan.args ?? {})).toEqual(["planId", "planVersion"])
     expect(Object.keys(result.tool?.n8n_v2_patch_plan.args ?? {})).toEqual(["planId", "planVersion", "patch"])
     expect(Object.keys(result.tool?.n8n_v2_validate_simulate.args ?? {})).toEqual(["planId", "planVersion"])
-    expect(Object.keys(result.tool?.n8n_v2_compile_preview.args ?? {})).toEqual(["planId", "planVersion"])
+    expect(Object.keys(result.tool?.n8n_v2_compile_preview.args ?? {})).toEqual(["planId", "planVersion", "workflowId"])
     expect(Object.keys(result.tool?.n8n_v2_apply.args ?? {})).toEqual(["previewId", "confirm", "workflowId"])
     expect(Object.keys(result.tool?.n8n_v2_claim_workflow.args ?? {})).toEqual(["workflowId", "mode", "confirm"])
     expect(Object.keys(result.tool?.n8n_v2_reverse_plan.args ?? {})).toEqual(["workflowId"])
@@ -508,6 +508,35 @@ describe("plugin exports", () => {
             claimMode: "full",
             markerWritten: true,
           }),
+        )
+
+        const updatePreview = parseToolOutput(
+          await result.tool?.n8n_v2_compile_preview.execute(
+            {
+              planId: preview.planId,
+              planVersion: preview.planVersion,
+              workflowId: "wf_claimed",
+            },
+            {} as never,
+          ),
+        ) as {
+          updateTarget?: {
+            workflowId: string
+            hasChanges: boolean
+            diff: { removedNodes: Array<{ nodeName: string }>; addedNodes: Array<{ nodeName: string }> }
+          }
+        }
+        expect(updatePreview.updateTarget).toEqual(
+          expect.objectContaining({
+            workflowId: "wf_claimed",
+            hasChanges: true,
+          }),
+        )
+        expect(updatePreview.updateTarget?.diff.removedNodes).toEqual(
+          expect.arrayContaining([expect.objectContaining({ nodeName: "Manual Trigger" })]),
+        )
+        expect(updatePreview.updateTarget?.diff.addedNodes).toEqual(
+          expect.arrayContaining([expect.objectContaining({ nodeName: "Receive input" })]),
         )
 
         const applied = parseToolOutput(

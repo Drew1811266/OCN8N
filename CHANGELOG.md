@@ -12,6 +12,7 @@ All notable changes for `opencode-n8n-builder` are documented here.
 - Added reverse planning for v2-claimed workflows with honest unmapped-node and uncertainty reporting.
 - Added confirm-gated dry-run trial artifacts that re-run local validation/simulation without triggering n8n or external APIs.
 - Added optional MCP `validate_workflow` after v2 compile preview with persisted `mcpValidationStatus`, warning propagation, and failure blocking.
+- Added optional `workflowId` update preview mode for `n8n_v2_compile_preview`, returning persisted structured diff metadata for v2-claimed inactive workflow updates.
 - Added release-gate docs for v1-to-v2 migration and the v2 pattern compatibility matrix.
 - v1 artifacts are not silently migrated; users must use v2 claim/import for old workflows.
 

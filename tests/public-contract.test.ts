@@ -17,6 +17,7 @@ import type {
   V2CompilePreviewArgs,
   V2CompilePreviewResult,
   V2McpValidationStatus,
+  V2PreviewUpdateTarget,
   V2CreatePlanArgs,
   V2CreatePlanResult,
   V2PatchPlanArgs,
@@ -40,6 +41,7 @@ import type {
   V2TrialRunArtifact,
   V2TrialRunMode,
   V2ValidateSimulateArgs,
+  V2WorkflowDiff,
   Warning,
 } from "../src/index.js"
 import { createN8nBuilderPlugin, N8nBuilderPlugin } from "../src/index.js"
@@ -199,6 +201,10 @@ describe("public package contract exports", () => {
       planId: version.planId,
       planVersion: version.planVersion,
     }
+    const updateCompileArgs: V2CompilePreviewArgs = {
+      ...compileArgs,
+      workflowId: "wf_1",
+    }
     const mcpValidationStatus: V2McpValidationStatus = "not_configured"
     const applyArgs: V2ApplyArgs = {
       previewId: "123e4567-e89b-12d3-a456-426614174000",
@@ -242,6 +248,23 @@ describe("public package contract exports", () => {
       warnings: [],
       createdAt: "2026-06-11T00:00:00.000Z",
     }
+    const updateDiff: V2WorkflowDiff = {
+      addedNodes: [{ nodeName: "Receive order", nodeType: "n8n-nodes-base.webhook" }],
+      removedNodes: [{ nodeName: "Manual Trigger", nodeType: "n8n-nodes-base.manualTrigger" }],
+      changedNodeParameters: [],
+      changedCredentials: [],
+      changedConnections: [],
+      changedSettings: [],
+    }
+    const updateTarget: V2PreviewUpdateTarget = {
+      workflowId: "wf_1",
+      name: "Orders",
+      url: "https://demo/workflow/wf_1",
+      currentWorkflowHash: "current_workflow_hash",
+      registryWorkflowHash: "current_workflow_hash",
+      hasChanges: true,
+      diff: updateDiff,
+    }
     const runTrialArgs: V2RunTrialArgs = {
       previewId: previewArtifact.previewId,
       mode: "dry_run",
@@ -257,6 +280,7 @@ describe("public package contract exports", () => {
       workflowHash: previewArtifact.workflowHash,
       validationStatus: "passed",
       mcpValidationStatus,
+      updateTarget,
       mappingTrace: [mappingTrace],
       warnings: [],
     }
@@ -417,7 +441,10 @@ describe("public package contract exports", () => {
       patchResult,
       validateArgs,
       compileArgs,
+      updateCompileArgs,
       mcpValidationStatus,
+      updateDiff,
+      updateTarget,
       applyArgs,
       updateApplyArgs,
       claimArgs,
