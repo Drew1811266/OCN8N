@@ -5,6 +5,15 @@ import {
   reviewV2Plan,
   validateAndSimulateV2Plan,
 } from "../src/v2/plan-service.js"
+import type { V2Plan } from "../src/v2/types.js"
+
+function complexPlan(): V2Plan {
+  return createInitialV2Plan({
+    name: "Order fulfillment",
+    prompt:
+      "Create a webhook order workflow that maps fields, filters invalid orders, branches by status with a default path, paginates API items in batches, calls an external fulfillment API with API key auth and mock response schema, retries failures, sends Slack notification, writes the result, and responds to the webhook.",
+  })
+}
 
 describe("v2 plan service foundation", () => {
   it("creates a deterministic initial plan with trigger and output patterns", () => {
@@ -154,5 +163,77 @@ describe("v2 plan service foundation", () => {
     expect(result.issues[0]).toMatchObject({ code: "V2_PATTERN_REF_UNKNOWN", stepId: "step_trigger" })
     expect(result.issues[1]).toMatchObject({ code: "V2_INPUT_REF_UNKNOWN", stepId: "step_trigger" })
     expect(result.issues[2]).toMatchObject({ code: "V2_OUTPUT_REF_UNKNOWN", stepId: "step_trigger" })
+  })
+
+  it("validates pattern composition requirements", () => {
+    const plan = complexPlan()
+    const result = validateAndSimulateV2Plan({
+      planId: "123e4567-e89b-12d3-a456-426614174000",
+      planVersion: 1,
+      plan: {
+        ...plan,
+        branches: plan.branches.filter((branch) => !branch.isDefault),
+        loops: [{ ...plan.loops[0], maxIterations: 0, termination: "" }],
+        externalCalls: [{ ...plan.externalCalls[0], responseContract: undefined }],
+        credentialRequirements: [],
+        errorPolicy: { strategy: "retry_then_fail", notifications: ["Slack"] },
+      },
+      checkedAt: "2026-06-11T00:00:00.000Z",
+    })
+
+    expect(result.status).toBe("failed")
+    expect(result.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining([
+        "V2_BRANCH_DEFAULT_REQUIRED",
+        "V2_LOOP_BOUND_REQUIRED",
+        "V2_LOOP_TERMINATION_REQUIRED",
+        "V2_EXTERNAL_RESPONSE_CONTRACT_REQUIRED",
+        "V2_EXTERNAL_CREDENTIAL_REQUIRED",
+        "V2_RETRY_ATTEMPTS_REQUIRED",
+      ]),
+    )
+  })
+
+  it("simulates branch and loop markers in sample paths", () => {
+    const plan = complexPlan()
+    const result = validateAndSimulateV2Plan({
+      planId: "123e4567-e89b-12d3-a456-426614174000",
+      planVersion: 1,
+      plan,
+      checkedAt: "2026-06-11T00:00:00.000Z",
+    })
+
+    expect(result.status).toBe("passed")
+    expect(result.sampleResults[0]?.path).toEqual([
+      "step_trigger",
+      "step_transform",
+      "step_branch",
+      "branch:branch_process",
+      "step_loop",
+      "loop:loop_batch_items",
+      "step_external_call",
+      "step_error_handling",
+      "step_output",
+    ])
+  })
+
+  it("simulates field flow from transformed entities to outputs", () => {
+    const plan = complexPlan()
+    const result = validateAndSimulateV2Plan({
+      planId: "123e4567-e89b-12d3-a456-426614174000",
+      planVersion: 1,
+      plan,
+      checkedAt: "2026-06-11T00:00:00.000Z",
+    })
+
+    expect(result.fieldTraces).toEqual(
+      expect.arrayContaining([
+        { field: "orderId", source: "Order", target: "output_response" },
+        { field: "status", source: "Order", target: "output_response" },
+        { field: "fulfillmentId", source: "FulfillmentResult", target: "output_write" },
+        { field: "status", source: "FulfillmentResult", target: "output_write" },
+        { field: "message", source: "output_notification", target: "output_notification" },
+      ]),
+    )
   })
 })

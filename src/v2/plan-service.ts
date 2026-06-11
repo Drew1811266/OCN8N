@@ -82,18 +82,9 @@ export function validateAndSimulateV2Plan(input: ValidateAndSimulateV2PlanInput)
         : input.plan.testContract.examples.map((example) => ({
             name: example.name,
             status: "passed",
-            path: input.plan.steps.map((step) => step.id),
+            path: simulateSamplePath(input.plan),
           })),
-    fieldTraces:
-      status === "failed"
-        ? []
-        : input.plan.entities.flatMap((entity) =>
-            Object.keys(entity.fields).map((field) => ({
-              field,
-              source: entity.name,
-              target: input.plan.outputs[0]?.id ?? "unknown",
-            })),
-          ),
+    fieldTraces: status === "failed" ? [] : simulateFieldTraces(input.plan),
   }
 }
 
@@ -193,6 +184,13 @@ function validatePlan(plan: V2Plan): V2ValidationIssue[] {
       })
     }
   }
+  if (hasPatternFamily(plan, "branch") && !plan.branches.some((branch) => branch.isDefault)) {
+    issues.push({
+      code: "V2_BRANCH_DEFAULT_REQUIRED",
+      message: "Branch pattern requires an explicit default branch.",
+      severity: "error",
+    })
+  }
 
   for (const loop of plan.loops) {
     if (!stepIds.has(loop.sourceStepId)) {
@@ -202,7 +200,99 @@ function validatePlan(plan: V2Plan): V2ValidationIssue[] {
         severity: "error",
       })
     }
+    if (!Number.isFinite(loop.maxIterations) || loop.maxIterations <= 0) {
+      issues.push({
+        code: "V2_LOOP_BOUND_REQUIRED",
+        message: `Loop "${loop.id}" requires a positive maximum iteration bound.`,
+        severity: "error",
+      })
+    }
+    if (loop.termination.trim().length === 0) {
+      issues.push({
+        code: "V2_LOOP_TERMINATION_REQUIRED",
+        message: `Loop "${loop.id}" requires an explicit termination condition.`,
+        severity: "error",
+      })
+    }
+  }
+
+  for (const externalCall of plan.externalCalls) {
+    if (!externalCall.responseContract || Object.keys(externalCall.responseContract).length === 0) {
+      issues.push({
+        code: "V2_EXTERNAL_RESPONSE_CONTRACT_REQUIRED",
+        message: `External call "${externalCall.id}" requires a response contract or mock schema.`,
+        severity: "error",
+        stepId: externalCall.stepId,
+      })
+    }
+    if (
+      !externalCall.credentialRequirementId ||
+      !plan.credentialRequirements.some((credential) => credential.id === externalCall.credentialRequirementId)
+    ) {
+      issues.push({
+        code: "V2_EXTERNAL_CREDENTIAL_REQUIRED",
+        message: `External call "${externalCall.id}" requires a matching credential requirement.`,
+        severity: "error",
+        stepId: externalCall.stepId,
+      })
+    }
+  }
+
+  if (
+    plan.errorPolicy.strategy === "retry_then_fail" &&
+    (!Number.isFinite(plan.errorPolicy.maxAttempts) || (plan.errorPolicy.maxAttempts ?? 0) <= 0)
+  ) {
+    issues.push({
+      code: "V2_RETRY_ATTEMPTS_REQUIRED",
+      message: "Retry error policy requires a positive maxAttempts value.",
+      severity: "error",
+    })
   }
 
   return issues
+}
+
+function simulateSamplePath(plan: V2Plan): string[] {
+  const path: string[] = []
+
+  for (const step of plan.steps) {
+    path.push(step.id)
+
+    const branch = plan.branches.find((candidate) => candidate.sourceStepId === step.id && !candidate.isDefault)
+    if (branch) {
+      path.push(`branch:${branch.id}`)
+    }
+
+    const loop = plan.loops.find((candidate) => candidate.sourceStepId === step.id)
+    if (loop) {
+      path.push(`loop:${loop.id}`)
+    }
+  }
+
+  return path
+}
+
+function simulateFieldTraces(plan: V2Plan): V2SimulationResult["fieldTraces"] {
+  const defaultTarget = plan.outputs[0]?.id ?? "unknown"
+  const writeTarget = plan.outputs.find((output) => output.mode === "write_service")?.id ?? defaultTarget
+  const traces = plan.entities.flatMap((entity) => {
+    const target = entity.name === "FulfillmentResult" ? writeTarget : defaultTarget
+    return Object.keys(entity.fields).map((field) => ({
+      field,
+      source: entity.name,
+      target,
+    }))
+  })
+
+  for (const output of plan.outputs) {
+    if (output.mode === "send_notification") {
+      traces.push({ field: "message", source: output.id, target: output.id })
+    }
+  }
+
+  return traces
+}
+
+function hasPatternFamily(plan: V2Plan, family: V2Plan["patterns"][number]["family"]): boolean {
+  return plan.patterns.some((pattern) => pattern.family === family)
 }
