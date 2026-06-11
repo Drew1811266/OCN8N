@@ -20,6 +20,8 @@ import type {
   V2CreatePlanResult,
   V2PatchPlanArgs,
   V2PatchPlanResult,
+  V2PatternCatalog,
+  V2PatternCatalogEntry,
   V2Plan,
   V2PlanPattern,
   V2PlanReview,
@@ -158,6 +160,13 @@ describe("public package contract exports", () => {
       riskLevel: "low",
       warnings: [],
     }
+    const catalogEntry: V2PatternCatalogEntry = {
+      family: "trigger",
+      label: "Trigger",
+      summary: "Starts the workflow.",
+      variants: [],
+    }
+    const catalog: V2PatternCatalog = { trigger: catalogEntry } as V2PatternCatalog
     const pattern: V2PlanPattern = {
       id: "pattern_trigger_1",
       family: "trigger",
@@ -290,6 +299,8 @@ describe("public package contract exports", () => {
     expect({
       createArgs,
       createResult,
+      catalogEntry,
+      catalog,
       pattern,
       plan,
       version,

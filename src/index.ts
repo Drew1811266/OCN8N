@@ -29,6 +29,12 @@ export type { V2CreatePlanArgs, V2CreatePlanResult } from "./tools/v2-create-pla
 export type { V2PatchPlanArgs, V2PatchPlanResult } from "./tools/v2-patch-plan.js"
 export type { V2ReviewPlanArgs } from "./tools/v2-review-plan.js"
 export type { V2ValidateSimulateArgs } from "./tools/v2-validate-simulate.js"
+export { V2_PATTERN_CATALOG, getV2PatternFamily, listV2PatternFamilies } from "./v2/pattern-catalog.js"
+export type {
+  V2PatternCatalog,
+  V2PatternCatalogEntry,
+  V2PatternVariantCatalogEntry,
+} from "./v2/pattern-catalog.js"
 
 export type {
   CredentialActionStatus,
