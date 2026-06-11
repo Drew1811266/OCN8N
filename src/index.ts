@@ -38,6 +38,28 @@ export type {
   V2ArtifactPaths,
   Warning,
 } from "./types.js"
+export type {
+  V2Confidence,
+  V2CredentialRequirement,
+  V2ExternalCall,
+  V2PatternFamily,
+  V2Plan,
+  V2PlanBranch,
+  V2PlanEntity,
+  V2PlanInput,
+  V2PlanLoop,
+  V2PlanOutput,
+  V2PlanPattern,
+  V2PlanReview,
+  V2PlanStep,
+  V2PlanVersion,
+  V2RegistryRecord,
+  V2RiskLevel,
+  V2SimulationResult,
+  V2TestContract,
+  V2ValidationIssue,
+  V2Warning,
+} from "./v2/types.js"
 export type { WorkflowRegistryRecord } from "./registry.js"
 export type { UpdatePreview } from "./preview-store.js"
 export type {

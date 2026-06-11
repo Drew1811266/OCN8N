@@ -16,6 +16,12 @@ import type {
   UpdateWorkflowArgs,
   UpdateWorkflowResult,
   V2ArtifactPaths,
+  V2Plan,
+  V2PlanPattern,
+  V2PlanReview,
+  V2PlanVersion,
+  V2RegistryRecord,
+  V2SimulationResult,
   Warning,
   WorkflowDiff,
   WorkflowRegistryRecord,
@@ -130,5 +136,116 @@ describe("public package contract exports", () => {
       preview,
       v2Paths,
     }).toBeDefined()
+  })
+
+  it("exports v2 plan artifact contract types", () => {
+    const pattern: V2PlanPattern = {
+      id: "pattern_trigger_1",
+      family: "trigger",
+      variant: "webhook",
+      summary: "Receive order payloads.",
+      confidence: "high",
+      riskLevel: "low",
+      warnings: [],
+    }
+    const plan: V2Plan = {
+      intent: {
+        goal: "Receive order payloads and return an acknowledgement.",
+        scope: ["webhook input", "response output"],
+        nonGoals: ["production activation"],
+      },
+      inputs: [
+        {
+          id: "input_webhook",
+          mode: "webhook",
+          schema: { orderId: "string" },
+          samples: [{ orderId: "ord_1" }],
+        },
+      ],
+      entities: [{ name: "Order", fields: { orderId: "string" } }],
+      steps: [
+        {
+          id: "step_receive",
+          name: "Receive order",
+          summary: "Accept order input.",
+          patternIds: ["pattern_trigger_1"],
+          inputRefs: ["input_webhook"],
+          outputRefs: ["Order"],
+        },
+      ],
+      patterns: [pattern],
+      branches: [],
+      loops: [],
+      externalCalls: [],
+      errorPolicy: { strategy: "fail_fast", notifications: [] },
+      outputs: [
+        {
+          id: "output_response",
+          mode: "respond_to_webhook",
+          contract: { accepted: "boolean" },
+        },
+      ],
+      testContract: {
+        examples: [
+          {
+            name: "valid order",
+            input: { orderId: "ord_1" },
+            expectedOutput: { accepted: true },
+          },
+        ],
+        edgeCases: [],
+      },
+      credentialRequirements: [],
+      confidence: "high",
+      riskLevel: "low",
+      warnings: [],
+      trace: ["Mapped webhook request to trigger and response patterns."],
+    }
+    const version: V2PlanVersion = {
+      planId: "123e4567-e89b-12d3-a456-426614174000",
+      planVersion: 1,
+      plan,
+      createdAt: "2026-06-11T00:00:00.000Z",
+      source: "create",
+      summary: "Initial plan",
+      contentHash: "hash",
+    }
+    const review: V2PlanReview = {
+      planId: version.planId,
+      planVersion: version.planVersion,
+      summary: "Plan is ready for validation.",
+      patternReviews: [],
+      assumptions: [],
+      risks: [],
+      openQuestions: [],
+      simulationCoverage: [],
+      confidence: "high",
+      riskLevel: "low",
+    }
+    const simulation: V2SimulationResult = {
+      planId: version.planId,
+      planVersion: version.planVersion,
+      status: "passed",
+      checkedAt: "2026-06-11T00:00:00.000Z",
+      issues: [],
+      sampleResults: [],
+      fieldTraces: [],
+    }
+    const registry: V2RegistryRecord = {
+      workflowId: "wf_1",
+      name: "Orders",
+      url: "https://demo/workflow/wf_1",
+      baseUrl: "https://demo/api/v1",
+      claimMode: "full",
+      activeAtClaim: false,
+      managedBy: "opencode-n8n-builder-v2",
+      managedByVersion: "2.0.0",
+      latestPlanId: version.planId,
+      latestPlanVersion: version.planVersion,
+      latestWorkflowHash: "workflow_hash",
+      lastUpdatedAt: "2026-06-11T00:00:00.000Z",
+    }
+
+    expect({ pattern, plan, version, review, simulation, registry }).toBeDefined()
   })
 })
