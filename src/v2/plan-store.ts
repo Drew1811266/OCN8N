@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { N8nBuilderError } from "../errors.js"
 import { stableHash } from "../hash.js"
 import { redactSecrets } from "../security.js"
 import type { V2Plan, V2PlanVersion } from "./types.js"
@@ -34,6 +35,13 @@ export class V2PlanStore {
   }
 
   async saveNext(input: SaveNextV2PlanInput): Promise<V2PlanVersion> {
+    if (!isSafePlanId(input.planId) || !isSafeVersion(input.parentPlanVersion)) {
+      throw new N8nBuilderError("Invalid v2 plan reference.", "V2_PLAN_INVALID", {
+        planId: input.planId,
+        parentPlanVersion: input.parentPlanVersion,
+      })
+    }
+
     const latest = await this.latest(input.planId)
     const nextVersion = latest ? latest.planVersion + 1 : input.parentPlanVersion + 1
 
@@ -58,7 +66,9 @@ export class V2PlanStore {
       const raw = await readFile(this.versionPath(planId, planVersion), "utf8")
       const parsed: unknown = JSON.parse(raw)
 
-      return isV2PlanVersion(parsed) ? parsed : undefined
+      return isV2PlanVersion(parsed) && parsed.planId === planId && parsed.planVersion === planVersion
+        ? parsed
+        : undefined
     } catch {
       return undefined
     }
@@ -137,24 +147,184 @@ function isV2PlanVersion(value: unknown): value is V2PlanVersion {
 function isV2Plan(value: unknown): value is V2Plan {
   return (
     isRecord(value) &&
-    isRecord(value.intent) &&
-    typeof value.intent.goal === "string" &&
-    Array.isArray(value.inputs) &&
-    Array.isArray(value.entities) &&
-    Array.isArray(value.steps) &&
-    Array.isArray(value.patterns) &&
-    Array.isArray(value.branches) &&
-    Array.isArray(value.loops) &&
-    Array.isArray(value.externalCalls) &&
-    isRecord(value.errorPolicy) &&
-    Array.isArray(value.outputs) &&
-    isRecord(value.testContract) &&
-    Array.isArray(value.credentialRequirements) &&
-    (value.confidence === "high" || value.confidence === "medium" || value.confidence === "low") &&
-    (value.riskLevel === "low" || value.riskLevel === "medium" || value.riskLevel === "high") &&
-    Array.isArray(value.warnings) &&
-    Array.isArray(value.trace)
+    isV2PlanIntent(value.intent) &&
+    isArrayOf(value.inputs, isV2PlanInput) &&
+    isArrayOf(value.entities, isV2PlanEntity) &&
+    isArrayOf(value.steps, isV2PlanStep) &&
+    isArrayOf(value.patterns, isV2PlanPattern) &&
+    isArrayOf(value.branches, isV2PlanBranch) &&
+    isArrayOf(value.loops, isV2PlanLoop) &&
+    isArrayOf(value.externalCalls, isV2ExternalCall) &&
+    isV2ErrorPolicy(value.errorPolicy) &&
+    isArrayOf(value.outputs, isV2PlanOutput) &&
+    isV2TestContract(value.testContract) &&
+    isArrayOf(value.credentialRequirements, isV2CredentialRequirement) &&
+    isConfidence(value.confidence) &&
+    isRiskLevel(value.riskLevel) &&
+    isArrayOf(value.warnings, isV2Warning) &&
+    isStringArray(value.trace)
   )
+}
+
+function isV2PlanIntent(value: unknown): boolean {
+  return isRecord(value) && typeof value.goal === "string" && isStringArray(value.scope) && isStringArray(value.nonGoals)
+}
+
+function isV2PlanInput(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    isOneOf(value.mode, ["webhook", "schedule", "manual", "polling"]) &&
+    isRecordOfString(value.schema) &&
+    isArrayOf(value.samples, isRecord)
+  )
+}
+
+function isV2PlanEntity(value: unknown): boolean {
+  return isRecord(value) && typeof value.name === "string" && isRecordOfString(value.fields)
+}
+
+function isV2PlanStep(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    typeof value.summary === "string" &&
+    isStringArray(value.patternIds) &&
+    isStringArray(value.inputRefs) &&
+    isStringArray(value.outputRefs)
+  )
+}
+
+function isV2PlanPattern(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    isOneOf(value.family, ["trigger", "transform", "branch", "loop_batch", "error_handling", "external_call", "output"]) &&
+    typeof value.variant === "string" &&
+    typeof value.summary === "string" &&
+    isConfidence(value.confidence) &&
+    isRiskLevel(value.riskLevel) &&
+    isArrayOf(value.warnings, isV2Warning)
+  )
+}
+
+function isV2PlanBranch(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.sourceStepId === "string" &&
+    typeof value.condition === "string" &&
+    typeof value.targetStepId === "string" &&
+    (value.isDefault === undefined || typeof value.isDefault === "boolean")
+  )
+}
+
+function isV2PlanLoop(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.sourceStepId === "string" &&
+    isOneOf(value.mode, ["pagination", "batch", "per_item"]) &&
+    typeof value.maxIterations === "number" &&
+    Number.isFinite(value.maxIterations) &&
+    typeof value.termination === "string"
+  )
+}
+
+function isV2ExternalCall(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.stepId === "string" &&
+    typeof value.service === "string" &&
+    typeof value.operation === "string" &&
+    (value.credentialRequirementId === undefined || typeof value.credentialRequirementId === "string") &&
+    isRecordOfString(value.requestContract) &&
+    (value.responseContract === undefined || isRecordOfString(value.responseContract)) &&
+    isOneOf(value.responseContractSource, ["user", "docs", "inferred", "missing"])
+  )
+}
+
+function isV2ErrorPolicy(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isOneOf(value.strategy, ["fail_fast", "retry_then_fail", "fallback", "dead_letter"]) &&
+    (value.maxAttempts === undefined || (typeof value.maxAttempts === "number" && Number.isFinite(value.maxAttempts))) &&
+    isStringArray(value.notifications)
+  )
+}
+
+function isV2PlanOutput(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    isOneOf(value.mode, ["respond_to_webhook", "write_service", "send_notification"]) &&
+    isRecordOfString(value.contract)
+  )
+}
+
+function isV2TestContract(value: unknown): boolean {
+  return (
+    isRecord(value) && isArrayOf(value.examples, isV2TestExample) && isArrayOf(value.edgeCases, isV2TestExample)
+  )
+}
+
+function isV2TestExample(value: unknown): boolean {
+  return (
+    isRecord(value) && typeof value.name === "string" && isRecord(value.input) && isRecord(value.expectedOutput)
+  )
+}
+
+function isV2CredentialRequirement(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.service === "string" &&
+    typeof value.credentialType === "string" &&
+    isOneOf(value.authMode, ["api_key", "header_auth", "basic", "manual", "oauth2"]) &&
+    isOneOf(value.status, ["available", "missing_env", "manual_setup", "oauth_handoff", "unknown"]) &&
+    isStringArray(value.affectedStepIds) &&
+    typeof value.blocksApply === "boolean"
+  )
+}
+
+function isV2Warning(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.code === "string" &&
+    typeof value.message === "string" &&
+    (value.stepId === undefined || typeof value.stepId === "string") &&
+    (value.patternId === undefined || typeof value.patternId === "string")
+  )
+}
+
+function isConfidence(value: unknown): boolean {
+  return isOneOf(value, ["high", "medium", "low"])
+}
+
+function isRiskLevel(value: unknown): boolean {
+  return isOneOf(value, ["low", "medium", "high"])
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isString)
+}
+
+function isRecordOfString(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((child) => typeof child === "string")
+}
+
+function isArrayOf(value: unknown, guard: (item: unknown) => boolean): boolean {
+  return Array.isArray(value) && value.every(guard)
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string"
+}
+
+function isOneOf<T extends string>(value: unknown, allowed: readonly T[]): value is T {
+  return typeof value === "string" && (allowed as readonly string[]).includes(value)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
