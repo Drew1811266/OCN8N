@@ -37,6 +37,24 @@ function record(overrides: Partial<V2RegistryRecord> = {}): V2RegistryRecord {
   }
 }
 
+async function expectInvalidUpsertLeavesNoRegistry(
+  registry: V2WorkflowRegistry,
+  invalidRecord: V2RegistryRecord,
+): Promise<void> {
+  let caught: unknown
+
+  try {
+    await registry.upsert(invalidRecord)
+  } catch (error) {
+    caught = error
+  }
+
+  expect(caught).toMatchObject({ code: "V2_REGISTRY_INVALID" })
+  expect((caught as { details?: unknown }).details).toEqual({ reason: "invalid_record" })
+  expect(await registry.list()).toEqual([])
+  await expect(readFile(registryPath(), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+}
+
 describe("V2WorkflowRegistry", () => {
   it("saves, replaces, sorts, and reads v2 records", async () => {
     const registry = new V2WorkflowRegistry(registryPath())
@@ -73,15 +91,20 @@ describe("V2WorkflowRegistry", () => {
       managedBy: "opencode-n8n-builder",
     } as unknown as V2RegistryRecord
 
-    try {
-      await registry.upsert(invalidRecord)
-      throw new Error("Expected invalid registry upsert to throw.")
-    } catch (error) {
-      expect(error).toMatchObject({ code: "V2_REGISTRY_INVALID" })
-      expect((error as { details?: unknown }).details).toEqual({ reason: "invalid_record" })
-    }
-    expect(await registry.list()).toEqual([])
-    await expect(readFile(registryPath(), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    await expectInvalidUpsertLeavesNoRegistry(registry, invalidRecord)
+  })
+
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Infinity],
+  ])("rejects invalid latestPlanVersion %s before writing a registry file", async (_label, latestPlanVersion) => {
+    const registry = new V2WorkflowRegistry(registryPath())
+    const invalidRecord = {
+      ...record(),
+      latestPlanVersion,
+    } as unknown as V2RegistryRecord
+
+    await expectInvalidUpsertLeavesNoRegistry(registry, invalidRecord)
   })
 
   it("reads missing, malformed, and v1 registry files as empty", async () => {

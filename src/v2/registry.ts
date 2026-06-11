@@ -68,7 +68,10 @@ function isV2RegistryRecord(value: unknown): value is V2RegistryRecord {
     value.managedBy === "opencode-n8n-builder-v2" &&
     typeof value.managedByVersion === "string" &&
     (value.latestPlanId === undefined || typeof value.latestPlanId === "string") &&
-    (value.latestPlanVersion === undefined || typeof value.latestPlanVersion === "number") &&
+    (value.latestPlanVersion === undefined ||
+      (typeof value.latestPlanVersion === "number" &&
+        Number.isSafeInteger(value.latestPlanVersion) &&
+        value.latestPlanVersion > 0)) &&
     (value.latestWorkflowHash === undefined || typeof value.latestWorkflowHash === "string") &&
     (value.latestPreviewId === undefined || typeof value.latestPreviewId === "string") &&
     (value.lastValidationStatus === undefined ||
