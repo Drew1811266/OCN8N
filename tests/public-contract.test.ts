@@ -16,6 +16,8 @@ import type {
   UpdateWorkflowArgs,
   UpdateWorkflowResult,
   V2ArtifactPaths,
+  V2AutoPreviewArgs,
+  V2AutoPreviewResult,
   V2CompiledPreview,
   V2CompilePreviewArgs,
   V2CompilePreviewResult,
@@ -155,6 +157,7 @@ describe("public package contract exports", () => {
       prompt: "Receive order payloads and return an acknowledgement.",
       name: "Orders",
     }
+    const autoPreviewArgs: V2AutoPreviewArgs = createArgs
     const createResult: V2CreatePlanResult = {
       planId: "123e4567-e89b-12d3-a456-426614174000",
       planVersion: 1,
@@ -324,6 +327,22 @@ describe("public package contract exports", () => {
       mappingTrace: [mappingTrace],
       warnings: [],
     }
+    const autoPreviewResult: V2AutoPreviewResult = {
+      planId: version.planId,
+      planVersion: version.planVersion,
+      summary: "Created v2 plan for: Receive order payloads and return an acknowledgement.",
+      previewId: previewArtifact.previewId,
+      workflowName: previewWorkflow.name,
+      nodeCount: previewWorkflow.nodes.length,
+      workflowHash: previewArtifact.workflowHash,
+      validationStatus: "passed",
+      confidence: "high",
+      riskLevel: "low",
+      review,
+      simulation,
+      mappingTrace: [mappingTrace],
+      warnings: [],
+    }
     const registry: V2RegistryRecord = {
       workflowId: "wf_1",
       name: "Orders",
@@ -341,6 +360,7 @@ describe("public package contract exports", () => {
 
     expect({
       createArgs,
+      autoPreviewArgs,
       createResult,
       catalogEntry,
       catalog,
@@ -358,6 +378,7 @@ describe("public package contract exports", () => {
       previewWorkflow,
       previewArtifact,
       compileResult,
+      autoPreviewResult,
       registry,
     }).toBeDefined()
   })

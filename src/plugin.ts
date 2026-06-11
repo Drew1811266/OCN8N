@@ -16,6 +16,7 @@ import {
 import { inspectWorkflow } from "./tools/inspect-workflow.js"
 import { listManagedWorkflows } from "./tools/list-managed-workflows.js"
 import { updateWorkflow, type UpdateWorkflowArgs } from "./tools/update-workflow.js"
+import { autoPreviewV2Workflow } from "./tools/v2-auto-preview.js"
 import { compileV2Preview } from "./tools/v2-compile-preview.js"
 import { createV2Plan } from "./tools/v2-create-plan.js"
 import { patchV2PlanTool } from "./tools/v2-patch-plan.js"
@@ -257,6 +258,26 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
             })
 
             return jsonOutput("managed n8n workflows", result)
+          },
+        }),
+
+        n8n_v2_auto_preview: tool({
+          description:
+            "Create, review, validate, simulate, and compile a v2 workflow preview from a natural-language request without writing to n8n.",
+          args: {
+            prompt: tool.schema.string().min(1),
+            name: tool.schema.string().optional(),
+          },
+          async execute(args) {
+            const resolved = await localDeps()
+            const result = await autoPreviewV2Workflow({
+              args,
+              planStore: resolved.v2PlanStore,
+              previewStore: resolved.v2PreviewStore,
+              pluginVersion: resolved.config.pluginVersion,
+            })
+
+            return jsonOutput("v2 n8n workflow auto preview compiled", result)
           },
         }),
 

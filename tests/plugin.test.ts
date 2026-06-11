@@ -88,6 +88,7 @@ describe("plugin exports", () => {
       "n8n_check_workflow_readiness",
       "n8n_inspect_workflow",
       "n8n_list_managed_workflows",
+      "n8n_v2_auto_preview",
       "n8n_v2_create_plan",
       "n8n_v2_review_plan",
       "n8n_v2_patch_plan",
@@ -109,6 +110,7 @@ describe("plugin exports", () => {
       "confirm",
       "allowWarnings",
     ])
+    expect(Object.keys(result.tool?.n8n_v2_auto_preview.args ?? {})).toEqual(["prompt", "name"])
     expect(Object.keys(result.tool?.n8n_v2_create_plan.args ?? {})).toEqual(["prompt", "name"])
     expect(Object.keys(result.tool?.n8n_v2_review_plan.args ?? {})).toEqual(["planId", "planVersion"])
     expect(Object.keys(result.tool?.n8n_v2_patch_plan.args ?? {})).toEqual(["planId", "planVersion", "patch"])
@@ -263,6 +265,25 @@ describe("plugin exports", () => {
       )
       expect(compiled.previewId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      )
+
+      const autoPreview = parseToolOutput(
+        await result.tool?.n8n_v2_auto_preview.execute(
+          {
+            prompt:
+              "Create a webhook order workflow that maps fields, branches by status, calls an external fulfillment API, retries failures, and responds to the webhook.",
+            name: "Auto order fulfillment",
+          },
+          {} as never,
+        ),
+      ) as { planId: string; planVersion: number; previewId: string; nodeCount: number; validationStatus: string }
+      expect(autoPreview).toEqual(
+        expect.objectContaining({
+          planVersion: 1,
+          previewId: expect.any(String),
+          nodeCount: expect.any(Number),
+          validationStatus: "passed",
+        }),
       )
     })
   })
