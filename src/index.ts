@@ -38,6 +38,7 @@ export type {
 export type { V2CompilePreviewArgs, V2CompilePreviewResult } from "./tools/v2-compile-preview.js"
 export type { V2CreatePlanArgs, V2CreatePlanResult } from "./tools/v2-create-plan.js"
 export type { V2PatchPlanArgs, V2PatchPlanResult } from "./tools/v2-patch-plan.js"
+export type { V2ReversePlanArgs, V2ReversePlanResult } from "./tools/v2-reverse-plan.js"
 export type { V2ReviewPlanArgs } from "./tools/v2-review-plan.js"
 export type { V2ValidateSimulateArgs } from "./tools/v2-validate-simulate.js"
 export { V2_PATTERN_CATALOG, getV2PatternFamily, listV2PatternFamilies } from "./v2/pattern-catalog.js"
@@ -47,6 +48,7 @@ export type {
   V2PatternVariantCatalogEntry,
 } from "./v2/pattern-catalog.js"
 export type { V2CompiledPreview, V2PreviewMappingTrace } from "./v2/preview-store.js"
+export type { ReversePlanFromWorkflowInput, ReversePlanFromWorkflowResult, V2ReverseUnmappedNode } from "./v2/reverse-planner.js"
 
 export type {
   CredentialActionStatus,

@@ -22,6 +22,7 @@ import { claimV2Workflow, type V2ClaimWorkflowArgs } from "./tools/v2-claim-work
 import { compileV2Preview } from "./tools/v2-compile-preview.js"
 import { createV2Plan } from "./tools/v2-create-plan.js"
 import { patchV2PlanTool } from "./tools/v2-patch-plan.js"
+import { reverseV2WorkflowPlan } from "./tools/v2-reverse-plan.js"
 import { reviewV2PlanTool } from "./tools/v2-review-plan.js"
 import { validateSimulateV2Plan } from "./tools/v2-validate-simulate.js"
 import { V2PlanStore } from "./v2/plan-store.js"
@@ -419,6 +420,28 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
             })
 
             return jsonOutput("v2 n8n workflow claim", result)
+          },
+        }),
+
+        n8n_v2_reverse_plan: tool({
+          description: "Reverse plan a v2-claimed n8n workflow into a local v2 plan artifact without writing to n8n.",
+          args: {
+            workflowId: tool.schema.string().min(1),
+          },
+          async execute(args) {
+            const resolved = await apiDeps()
+            const result = await reverseV2WorkflowPlan({
+              args,
+              config: {
+                baseUrl: resolved.config.baseUrl,
+                pluginVersion: resolved.config.pluginVersion,
+              },
+              api: resolved.api,
+              registry: resolved.v2Registry,
+              planStore: resolved.v2PlanStore,
+            })
+
+            return jsonOutput("v2 n8n workflow reverse plan", result)
           },
         }),
       },

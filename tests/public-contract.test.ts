@@ -41,6 +41,9 @@ import type {
   V2PlanVersion,
   V2PreviewMappingTrace,
   V2RegistryRecord,
+  V2ReversePlanArgs,
+  V2ReversePlanResult,
+  V2ReverseUnmappedNode,
   V2ReviewPlanArgs,
   V2SimulationResult,
   V2ValidateSimulateArgs,
@@ -137,6 +140,34 @@ describe("public package contract exports", () => {
       runsDir: "/tmp/project/.opencode/n8n-v2/runs",
       exportsDir: "/tmp/project/.opencode/n8n-v2/exports",
     }
+    const reverseArgs: V2ReversePlanArgs = { workflowId: "wf_1" }
+    const unmappedNode: V2ReverseUnmappedNode = {
+      name: "Community Node",
+      type: "n8n-nodes-base.communityNode",
+      reason: "unsupported_node_type",
+    }
+    const reverseResult: Pick<
+      V2ReversePlanResult,
+      | "workflowId"
+      | "planId"
+      | "planVersion"
+      | "source"
+      | "confidence"
+      | "riskLevel"
+      | "mappedStepCount"
+      | "unmappedNodes"
+      | "warnings"
+    > = {
+      workflowId: "wf_1",
+      planId: "123e4567-e89b-12d3-a456-426614174000",
+      planVersion: 1,
+      source: "reverse",
+      confidence: "low",
+      riskLevel: "medium",
+      mappedStepCount: 1,
+      unmappedNodes: [unmappedNode],
+      warnings: [],
+    }
 
     expect({
       buildArgs,
@@ -157,6 +188,8 @@ describe("public package contract exports", () => {
       registry,
       preview,
       v2Paths,
+      reverseArgs,
+      reverseResult,
     }).toBeDefined()
   })
 
