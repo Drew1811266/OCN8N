@@ -57,6 +57,15 @@ describe("V2WorkflowRegistry", () => {
     expect(JSON.parse(raw).workflows).toHaveLength(2)
   })
 
+  it("sorts same-name records by workflowId", async () => {
+    const registry = new V2WorkflowRegistry(registryPath())
+
+    await registry.upsert(record({ workflowId: "wf_b", name: "Orders" }))
+    await registry.upsert(record({ workflowId: "wf_a", name: "Orders" }))
+
+    expect((await registry.list()).map((item) => item.workflowId)).toEqual(["wf_a", "wf_b"])
+  })
+
   it("reads missing, malformed, and v1 registry files as empty", async () => {
     const registry = new V2WorkflowRegistry(registryPath())
     expect(await registry.list()).toEqual([])
@@ -70,7 +79,7 @@ describe("V2WorkflowRegistry", () => {
       JSON.stringify({
         workflows: [
           {
-            workflowId: "wf_1",
+            ...record(),
             managedBy: "opencode-n8n-builder",
           },
         ],
