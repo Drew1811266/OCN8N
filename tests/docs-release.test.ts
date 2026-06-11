@@ -8,6 +8,8 @@ const docs = [
   "docs/operations.md",
   "docs/troubleshooting.md",
   "docs/release-checklist.md",
+  "docs/migration-v1-to-v2.md",
+  "docs/pattern-compatibility-matrix.md",
 ]
 
 const tools = [
@@ -89,6 +91,8 @@ describe("release documentation", () => {
     expect(readme).toContain("docs/public-contract.md")
     expect(readme).toContain("docs/compatibility.md")
     expect(readme).toContain("docs/security-review.md")
+    expect(readme).toContain("docs/migration-v1-to-v2.md")
+    expect(readme).toContain("docs/pattern-compatibility-matrix.md")
     expect(changelog).toContain("## 2.0.0")
     expect(changelog).toContain("Breaking Reset")
     expect(changelog).toContain("opencode-n8n-builder-v2")
@@ -128,6 +132,8 @@ describe("release documentation", () => {
     const compatibility = await readFile("docs/compatibility.md", "utf8")
     const security = await readFile("docs/security-review.md", "utf8")
     const releaseChecklist = await readFile("docs/release-checklist.md", "utf8")
+    const migration = await readFile("docs/migration-v1-to-v2.md", "utf8")
+    const patternMatrix = await readFile("docs/pattern-compatibility-matrix.md", "utf8")
 
     for (const tool of tools) {
       expect(publicContract).toContain(tool)
@@ -164,6 +170,27 @@ describe("release documentation", () => {
       "n8n 2.23.4",
     ]) {
       expect(compatibility).toContain(term)
+      expect(patternMatrix).toContain(term)
+    }
+
+    for (const term of [
+      "v1 `.opencode/n8n-workflows.json` is not a v2 registry",
+      "n8n_v2_claim_workflow",
+      "read-only claim",
+      "full claim",
+      "no silent migration",
+    ]) {
+      expect(migration).toContain(term)
+    }
+
+    for (const term of [
+      "Pattern Compatibility Matrix",
+      "Required variants",
+      "Validation focus",
+      "Core node combinations",
+      "Medium-depth",
+    ]) {
+      expect(patternMatrix).toContain(term)
     }
 
     for (const term of [

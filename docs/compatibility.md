@@ -20,6 +20,8 @@ This document records v2.0 compatibility expectations. It does not claim exhaust
 
 v2.0 describes support primarily by pattern family rather than broad node coverage. The seven supported v2 pattern families are:
 
+See `docs/pattern-compatibility-matrix.md` for the release-gate matrix with required variants, validation focus, core node combinations, and medium-depth notes.
+
 | Pattern family | Medium-depth v2 behavior | Core node combinations |
 | --- | --- | --- |
 | `trigger` | Manual, webhook, schedule, and polling-style entry modeling. | Manual Trigger, Webhook, Schedule Trigger/Cron |

@@ -41,6 +41,8 @@ v2.0 是破坏性重置：
 - [Public Contract](docs/public-contract.md)
 - [Compatibility](docs/compatibility.md)
 - [Security Review](docs/security-review.md)
+- [v1 to v2 Migration Guide](docs/migration-v1-to-v2.md)
+- [Pattern Compatibility Matrix](docs/pattern-compatibility-matrix.md)
 - [CHANGELOG](CHANGELOG.md)
 
 ## 项目目标

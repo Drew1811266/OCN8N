@@ -11,6 +11,7 @@ All notable changes for `opencode-n8n-builder` are documented here.
 - Added `n8n_v2_apply` update support for v2-claimed inactive workflows with registry ownership, base URL, active-state, and stale-hash guards.
 - Added reverse planning for v2-claimed workflows with honest unmapped-node and uncertainty reporting.
 - Added confirm-gated dry-run trial artifacts that re-run local validation/simulation without triggering n8n or external APIs.
+- Added release-gate docs for v1-to-v2 migration and the v2 pattern compatibility matrix.
 - v1 artifacts are not silently migrated; users must use v2 claim/import for old workflows.
 
 ## 1.0.0
