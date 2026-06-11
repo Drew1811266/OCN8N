@@ -16,6 +16,11 @@ import {
 import { inspectWorkflow } from "./tools/inspect-workflow.js"
 import { listManagedWorkflows } from "./tools/list-managed-workflows.js"
 import { updateWorkflow, type UpdateWorkflowArgs } from "./tools/update-workflow.js"
+import { createV2Plan } from "./tools/v2-create-plan.js"
+import { patchV2PlanTool } from "./tools/v2-patch-plan.js"
+import { reviewV2PlanTool } from "./tools/v2-review-plan.js"
+import { validateSimulateV2Plan } from "./tools/v2-validate-simulate.js"
+import { V2PlanStore } from "./v2/plan-store.js"
 
 export type N8nBuilderPluginOptions = {
   version?: string
@@ -46,6 +51,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
       return {
         config,
         registry: new WorkflowRegistry(config.registryPath),
+        v2PlanStore: new V2PlanStore(config.v2.plansDir),
       }
     }
 
@@ -248,6 +254,75 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
             })
 
             return jsonOutput("managed n8n workflows", result)
+          },
+        }),
+
+        n8n_v2_create_plan: tool({
+          description: "Create a v2 business workflow plan artifact without connecting to n8n.",
+          args: {
+            prompt: tool.schema.string().min(1),
+            name: tool.schema.string().optional(),
+          },
+          async execute(args) {
+            const resolved = await localDeps()
+            const result = await createV2Plan({
+              args,
+              planStore: resolved.v2PlanStore,
+            })
+
+            return jsonOutput("v2 n8n workflow plan created", result)
+          },
+        }),
+
+        n8n_v2_review_plan: tool({
+          description: "Explain and review a stored v2 business workflow plan version.",
+          args: {
+            planId: tool.schema.string().min(1),
+            planVersion: tool.schema.number().int().min(1),
+          },
+          async execute(args) {
+            const resolved = await localDeps()
+            const result = await reviewV2PlanTool({
+              args,
+              planStore: resolved.v2PlanStore,
+            })
+
+            return jsonOutput("v2 n8n workflow plan review", result)
+          },
+        }),
+
+        n8n_v2_patch_plan: tool({
+          description: "Patch a stored v2 business workflow plan and save a new plan version.",
+          args: {
+            planId: tool.schema.string().min(1),
+            planVersion: tool.schema.number().int().min(1),
+            patch: tool.schema.string().min(1),
+          },
+          async execute(args) {
+            const resolved = await localDeps()
+            const result = await patchV2PlanTool({
+              args,
+              planStore: resolved.v2PlanStore,
+            })
+
+            return jsonOutput("v2 n8n workflow plan patched", result)
+          },
+        }),
+
+        n8n_v2_validate_simulate: tool({
+          description: "Run foundation v2 validation and sample simulation for a stored plan version.",
+          args: {
+            planId: tool.schema.string().min(1),
+            planVersion: tool.schema.number().int().min(1),
+          },
+          async execute(args) {
+            const resolved = await localDeps()
+            const result = await validateSimulateV2Plan({
+              args,
+              planStore: resolved.v2PlanStore,
+            })
+
+            return jsonOutput("v2 n8n workflow plan validation and simulation", result)
           },
         }),
       },

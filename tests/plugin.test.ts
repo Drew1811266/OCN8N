@@ -76,7 +76,7 @@ describe("plugin exports", () => {
     expect(typeof N8nBuilderPlugin).toBe("function")
   })
 
-  it("registers the six n8n tools", async () => {
+  it("registers v1 tools and v2 foundation tools", async () => {
     const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
 
     const result = await plugin(mockPluginInput())
@@ -88,6 +88,10 @@ describe("plugin exports", () => {
       "n8n_check_workflow_readiness",
       "n8n_inspect_workflow",
       "n8n_list_managed_workflows",
+      "n8n_v2_create_plan",
+      "n8n_v2_review_plan",
+      "n8n_v2_patch_plan",
+      "n8n_v2_validate_simulate",
     ])
     expect(Object.keys(result.tool?.n8n_build_workflow.args ?? {})).toEqual(["prompt", "name"])
     expect(Object.keys(result.tool?.n8n_update_workflow.args ?? {})).toEqual(["workflowId", "prompt", "mode", "previewId"])
@@ -104,6 +108,10 @@ describe("plugin exports", () => {
       "confirm",
       "allowWarnings",
     ])
+    expect(Object.keys(result.tool?.n8n_v2_create_plan.args ?? {})).toEqual(["prompt", "name"])
+    expect(Object.keys(result.tool?.n8n_v2_review_plan.args ?? {})).toEqual(["planId", "planVersion"])
+    expect(Object.keys(result.tool?.n8n_v2_patch_plan.args ?? {})).toEqual(["planId", "planVersion", "patch"])
+    expect(Object.keys(result.tool?.n8n_v2_validate_simulate.args ?? {})).toEqual(["planId", "planVersion"])
   })
 
   it("routes rollback update modes without requiring MCP configuration", async () => {
@@ -180,6 +188,30 @@ describe("plugin exports", () => {
           output: expect.stringContaining("wf_1"),
         }),
       )
+    })
+  })
+
+  it("runs v2 local plan tools without n8n API or MCP configuration", async () => {
+    await withoutN8nEnv(async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-v2-"))
+      const plugin = createN8nBuilderPlugin({ version: "2.0.0" })
+      const result = await plugin(mockPluginInput({ directory, opencodeConfig: {} }))
+
+      const created = parseToolOutput(
+        await result.tool?.n8n_v2_create_plan.execute(
+          { prompt: "Receive an order webhook", name: "Order intake" },
+          {} as never,
+        ),
+      ) as { planId: string; planVersion: number }
+      expect(created.planVersion).toBe(1)
+
+      const reviewed = parseToolOutput(
+        await result.tool?.n8n_v2_review_plan.execute(
+          { planId: created.planId, planVersion: created.planVersion },
+          {} as never,
+        ),
+      ) as { summary: string }
+      expect(reviewed.summary).toContain("pattern")
     })
   })
 
