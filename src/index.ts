@@ -25,6 +25,10 @@ export type {
   WorkflowNodeSummary,
 } from "./tools/inspect-workflow.js"
 export type { ListManagedWorkflowsResult } from "./tools/list-managed-workflows.js"
+export type { V2CreatePlanArgs, V2CreatePlanResult } from "./tools/v2-create-plan.js"
+export type { V2PatchPlanArgs, V2PatchPlanResult } from "./tools/v2-patch-plan.js"
+export type { V2ReviewPlanArgs } from "./tools/v2-review-plan.js"
+export type { V2ValidateSimulateArgs } from "./tools/v2-validate-simulate.js"
 
 export type {
   CredentialActionStatus,

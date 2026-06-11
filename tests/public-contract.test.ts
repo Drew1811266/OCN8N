@@ -16,12 +16,18 @@ import type {
   UpdateWorkflowArgs,
   UpdateWorkflowResult,
   V2ArtifactPaths,
+  V2CreatePlanArgs,
+  V2CreatePlanResult,
+  V2PatchPlanArgs,
+  V2PatchPlanResult,
   V2Plan,
   V2PlanPattern,
   V2PlanReview,
   V2PlanVersion,
   V2RegistryRecord,
+  V2ReviewPlanArgs,
   V2SimulationResult,
+  V2ValidateSimulateArgs,
   Warning,
   WorkflowDiff,
   WorkflowRegistryRecord,
@@ -139,6 +145,19 @@ describe("public package contract exports", () => {
   })
 
   it("exports v2 plan artifact contract types", () => {
+    const createArgs: V2CreatePlanArgs = {
+      prompt: "Receive order payloads and return an acknowledgement.",
+      name: "Orders",
+    }
+    const createResult: V2CreatePlanResult = {
+      planId: "123e4567-e89b-12d3-a456-426614174000",
+      planVersion: 1,
+      summary: "Created v2 plan for: Receive order payloads and return an acknowledgement.",
+      patternCount: 1,
+      confidence: "high",
+      riskLevel: "low",
+      warnings: [],
+    }
     const pattern: V2PlanPattern = {
       id: "pattern_trigger_1",
       family: "trigger",
@@ -210,6 +229,10 @@ describe("public package contract exports", () => {
       summary: "Initial plan",
       contentHash: "hash",
     }
+    const reviewArgs: V2ReviewPlanArgs = {
+      planId: version.planId,
+      planVersion: version.planVersion,
+    }
     const review: V2PlanReview = {
       planId: version.planId,
       planVersion: version.planVersion,
@@ -221,6 +244,24 @@ describe("public package contract exports", () => {
       simulationCoverage: [],
       confidence: "high",
       riskLevel: "low",
+    }
+    const patchArgs: V2PatchPlanArgs = {
+      planId: version.planId,
+      planVersion: version.planVersion,
+      patch: "Add an error notification.",
+    }
+    const patchResult: V2PatchPlanResult = {
+      planId: version.planId,
+      planVersion: 2,
+      parentPlanVersion: version.planVersion,
+      summary: "Patched v2 plan: Add an error notification.",
+      confidence: "medium",
+      riskLevel: "low",
+      warnings: [],
+    }
+    const validateArgs: V2ValidateSimulateArgs = {
+      planId: version.planId,
+      planVersion: version.planVersion,
     }
     const simulation: V2SimulationResult = {
       planId: version.planId,
@@ -246,6 +287,19 @@ describe("public package contract exports", () => {
       lastUpdatedAt: "2026-06-11T00:00:00.000Z",
     }
 
-    expect({ pattern, plan, version, review, simulation, registry }).toBeDefined()
+    expect({
+      createArgs,
+      createResult,
+      pattern,
+      plan,
+      version,
+      reviewArgs,
+      review,
+      patchArgs,
+      patchResult,
+      validateArgs,
+      simulation,
+      registry,
+    }).toBeDefined()
   })
 })
