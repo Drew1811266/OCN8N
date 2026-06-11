@@ -1,6 +1,6 @@
 # Release Checklist
 
-本清单用于 v0.9 之后的发布准备。除非 project owner 明确批准，不要 tag、不要 publish npm、不要合并 release 分支。
+本清单用于 v2.0 之后的发布准备。除非 project owner 明确批准，不要 tag、不要 publish npm、不要合并 release 分支。
 
 ## Pre-release Verification
 
@@ -20,6 +20,26 @@
 - [ ] `docs/security-review.md` 记录无已知 critical safety blocker。
 - [ ] package entrypoint 导出公开类型，`tests/public-contract.test.ts` 通过。
 - [ ] GitHub token 具备 `workflow` scope，或明确记录 `.github/workflows/check.yml` 无法推送的授权阻断。
+
+## v2.0 Public Contract Reset Review
+
+- [ ] `README.md` 当前版本为 `2.0.0`，并描述 Breaking Reset。
+- [ ] `CHANGELOG.md` 包含 `## 2.0.0`。
+- [ ] `package.json` 和 `package-lock.json` root version 均为 `2.0.0`。
+- [ ] 默认插件入口只暴露 `n8n_v2_auto_preview`。
+- [ ] 默认插件入口只暴露 `n8n_v2_create_plan`。
+- [ ] 默认插件入口只暴露 `n8n_v2_review_plan`。
+- [ ] 默认插件入口只暴露 `n8n_v2_patch_plan`。
+- [ ] 默认插件入口只暴露 `n8n_v2_validate_simulate`。
+- [ ] 默认插件入口只暴露 `n8n_v2_compile_preview`。
+- [ ] 默认插件入口只暴露 `n8n_v2_apply`。
+- [ ] 默认插件入口只暴露 `n8n_v2_claim_workflow`。
+- [ ] 默认插件入口只暴露 `n8n_v2_reverse_plan`。
+- [ ] `docs/public-contract.md` 覆盖 v2 tools、result types、`V2ArtifactPaths`、`V2RegistryRecord` 和 `V2CompiledPreview`。
+- [ ] `docs/operations.md` 说明 `.opencode/n8n-v2/` artifact root 和 v1 artifact 不自动迁移。
+- [ ] `docs/compatibility.md` 覆盖七个 pattern family：`trigger`、`transform`、`branch`、`loop_batch`、`error_handling`、`external_call`、`output`。
+- [ ] `docs/security-review.md` 记录 no silent n8n writes、no active workflow structural apply、no silent migration from v1 artifacts、no execution-history sampling without opt-in、no trial run without opt-in。
+- [ ] `tests/plugin.test.ts`、`tests/public-contract.test.ts`、`tests/package-metadata.test.ts` 和 `tests/docs-release.test.ts` 通过。
 
 ## Pack Review
 

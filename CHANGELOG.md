@@ -2,6 +2,15 @@
 
 All notable changes for `opencode-n8n-builder` are documented here.
 
+## 2.0.0
+
+- Breaking Reset: replaced the default v1 public plugin tools with the v2 pattern-first tool contract.
+- Default plugin surface now exposes `n8n_v2_auto_preview`, `n8n_v2_create_plan`, `n8n_v2_review_plan`, `n8n_v2_patch_plan`, `n8n_v2_validate_simulate`, `n8n_v2_compile_preview`, `n8n_v2_apply`, `n8n_v2_claim_workflow`, and `n8n_v2_reverse_plan`.
+- Isolated v2 artifacts under `.opencode/n8n-v2/`, including plan versions, compiled previews, and v2 registry records.
+- Added explicit v2 claim/import rules with `opencode-n8n-builder-v2` ownership and active workflow read-only claim support.
+- Added reverse planning for v2-claimed workflows with honest unmapped-node and uncertainty reporting.
+- v1 artifacts are not silently migrated; users must use v2 claim/import for old workflows.
+
 ## 1.0.0
 
 - Exported public TypeScript contract types from the package entrypoint.

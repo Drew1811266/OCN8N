@@ -1,10 +1,33 @@
 # opencode-n8n-builder
 
-`opencode-n8n-builder` 是一个用于连接 OpenCode 和 n8n 的插件。它允许用户用自然语言描述自动化需求，由 OpenCode 结合 n8n 官方 MCP 节点文档生成、检查并安全更新 n8n workflow 草稿。
+`opencode-n8n-builder` 是一个用于连接 OpenCode 和 n8n 的插件。它的 2.0 默认入口使用 pattern-first 计划模型，把自然语言需求拆成可审查的业务 plan、验证/模拟结果、compiled preview 和显式确认后的 n8n 写入。
 
-当前版本：`1.0.0`
+当前版本：`2.0.0`
 
-当前状态：`v1.0` release candidate。公开工具契约、导出类型、兼容性说明、安全审查、安装运营文档和 release checklist 已整理完成；运行时仍保持保守安全边界，不新增 active workflow 结构编辑，也不自动完成 OAuth consent。
+当前状态：`v2.0` public contract reset。默认 OpenCode 工具面已经从 v1 build/update/inspect 工具切换为 `n8n_v2_*` 工具；v1 实现代码仍保留在仓库中用于 legacy 覆盖，但不再通过默认插件入口暴露。
+
+## Breaking Reset
+
+v2.0 是破坏性重置：
+
+- v1 `.opencode/n8n-workflows.json` 不是 v2 registry。
+- v1 update preview 文件不会被 v2 读取或迁移。
+- v2 artifacts 只写入 `.opencode/n8n-v2/`。
+- v2 ownership marker 是 `opencode-n8n-builder-v2`。
+- 旧 workflow 必须通过 `n8n_v2_claim_workflow` 显式 claim/import 后，才能进入 v2 registry。
+- active workflow 只能 read-only claim 和 reverse plan；v2.0 不做 active workflow structural apply。
+
+默认公开工具：
+
+- `n8n_v2_auto_preview`
+- `n8n_v2_create_plan`
+- `n8n_v2_review_plan`
+- `n8n_v2_patch_plan`
+- `n8n_v2_validate_simulate`
+- `n8n_v2_compile_preview`
+- `n8n_v2_apply`
+- `n8n_v2_claim_workflow`
+- `n8n_v2_reverse_plan`
 
 ## 文档索引
 
@@ -164,6 +187,16 @@ v0.9 仍不发布 npm 包、不创建 release tag、不改变 runtime tool contr
 - README、CHANGELOG、release checklist 和 package metadata 更新到 `1.0.0`。
 
 v1.0.0 是稳定契约 release candidate，不代表发布到 npm 或创建 Git tag；tag、GitHub release 和 npm publish 仍需要项目 owner 明确批准。
+
+## v2.0.0 新增能力
+
+- 默认插件入口只注册 v2 工具，不再注册 `n8n_build_workflow`、`n8n_update_workflow`、`n8n_claim_workflow`、`n8n_check_workflow_readiness`、`n8n_inspect_workflow` 和 `n8n_list_managed_workflows`。
+- 新增隔离的 v2 artifact root：`.opencode/n8n-v2/`。
+- 支持高级链路：`n8n_v2_create_plan` -> `n8n_v2_review_plan` -> `n8n_v2_patch_plan` -> `n8n_v2_validate_simulate` -> `n8n_v2_compile_preview` -> `n8n_v2_apply`。
+- 支持便利链路：`n8n_v2_auto_preview` 一次性完成 plan、review、validate/simulate 和 compile preview，不写 n8n。
+- 支持 inactive workflow full claim，以及 active workflow read-only claim。
+- 支持 `n8n_v2_reverse_plan` 从 v2-claimed workflow 生成 `source: "reverse"` 的 plan artifact，并报告 unmapped nodes、inferred external contracts 和 credential uncertainty。
+- v2 ownership、registry、preview 和 plan artifact 均与 v1 分离；不会 silent migration。
 
 ## 当前暂不支持
 

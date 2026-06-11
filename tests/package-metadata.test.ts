@@ -6,7 +6,7 @@ async function readJson<T>(path: string): Promise<T> {
 }
 
 describe("package metadata", () => {
-  it("declares v1 release-candidate metadata", async () => {
+  it("declares v2 release metadata", async () => {
     const pkg = await readJson<{
       version: string
       description: string
@@ -18,9 +18,9 @@ describe("package metadata", () => {
       scripts?: Record<string, string>
     }>("package.json")
 
-    expect(pkg.version).toBe("1.0.0")
+    expect(pkg.version).toBe("2.0.0")
     expect(pkg.description).toBe(
-      "OpenCode plugin for creating, iterating, validating, and operating managed n8n workflows.",
+      "OpenCode plugin for v2 pattern-first planning, simulation, preview, and safe n8n workflow apply.",
     )
     expect(pkg.repository).toEqual({
       type: "git",
@@ -38,7 +38,7 @@ describe("package metadata", () => {
       "package-lock.json",
     )
 
-    expect(lock.version).toBe("1.0.0")
-    expect(lock.packages[""].version).toBe("1.0.0")
+    expect(lock.version).toBe("2.0.0")
+    expect(lock.packages[""].version).toBe("2.0.0")
   })
 })
