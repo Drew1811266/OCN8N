@@ -9,6 +9,7 @@ import type { V2RegistryRecord, V2SimulationResult, V2Warning } from "../v2/type
 
 export type V2ApplyArgs = {
   previewId: string
+  workflowId?: string
   confirm: boolean
 }
 
@@ -16,7 +17,7 @@ export type V2ApplyResult = {
   workflowId: string
   name: string
   url: string
-  mode: "create"
+  mode: "create" | "update"
   previewId: string
   planId: string
   planVersion: number
@@ -31,6 +32,8 @@ export async function applyV2Preview(input: {
   config: Pick<ApiPluginConfig, "baseUrl" | "pluginVersion">
   api: {
     createWorkflow(workflow: N8nWorkflow): Promise<N8nWorkflow & { id: string }>
+    getWorkflow?(workflowId: string): Promise<N8nWorkflow & { id: string }>
+    updateWorkflow?(workflowId: string, workflow: N8nWorkflow): Promise<N8nWorkflow & { id: string }>
   }
   planStore: V2PlanStore
   previewStore: V2PreviewStore
@@ -84,6 +87,15 @@ export async function applyV2Preview(input: {
     })
   }
 
+  if (input.args.workflowId) {
+    return applyUpdate({
+      workflowId: input.args.workflowId,
+      input,
+      preview,
+      validationWarnings: validation.warnings.map(toV2Warning),
+    })
+  }
+
   const now = input.now?.() ?? new Date()
   const workflowToCreate: N8nWorkflow = {
     ...preview.workflow,
@@ -122,6 +134,113 @@ export async function applyV2Preview(input: {
     workflowHash,
     validationStatus: preview.validationStatus,
     warnings: [...preview.warnings, ...validation.warnings.map(toV2Warning)],
+  }
+}
+
+async function applyUpdate(input: {
+  workflowId: string
+  input: {
+    config: Pick<ApiPluginConfig, "baseUrl" | "pluginVersion">
+    api: {
+      getWorkflow?(workflowId: string): Promise<N8nWorkflow & { id: string }>
+      updateWorkflow?(workflowId: string, workflow: N8nWorkflow): Promise<N8nWorkflow & { id: string }>
+    }
+    registry: V2WorkflowRegistry
+    now?: () => Date
+  }
+  preview: {
+    previewId: string
+    planId: string
+    planVersion: number
+    workflow: N8nWorkflow
+    workflowHash: string
+    validationStatus: V2SimulationResult["status"]
+    warnings: V2Warning[]
+  }
+  validationWarnings: V2Warning[]
+}): Promise<V2ApplyResult> {
+  const record = await input.input.registry.get(input.workflowId)
+  if (!record) {
+    throw new N8nBuilderError("V2 workflow was not claimed.", "V2_WORKFLOW_NOT_CLAIMED", {
+      workflowId: input.workflowId,
+    })
+  }
+
+  if (record.baseUrl !== input.input.config.baseUrl) {
+    throw new N8nBuilderError("V2 registry record belongs to a different n8n base URL.", "V2_REGISTRY_BASE_URL_MISMATCH", {
+      workflowId: input.workflowId,
+      registryBaseUrl: record.baseUrl,
+      configuredBaseUrl: input.input.config.baseUrl,
+    })
+  }
+
+  if (record.claimMode !== "full") {
+    throw new N8nBuilderError("V2 apply cannot update a read-only claimed workflow.", "V2_APPLY_READ_ONLY_CLAIM", {
+      workflowId: input.workflowId,
+      claimMode: record.claimMode,
+    })
+  }
+
+  if (!input.input.api.getWorkflow || !input.input.api.updateWorkflow) {
+    throw new N8nBuilderError("V2 apply update requires workflow read and update API methods.", "V2_APPLY_UPDATE_UNSUPPORTED", {
+      workflowId: input.workflowId,
+    })
+  }
+
+  const currentWorkflow = await input.input.api.getWorkflow(input.workflowId)
+  if (currentWorkflow.active) {
+    throw new N8nBuilderError("V2 apply cannot structurally update an active workflow.", "V2_APPLY_ACTIVE_WORKFLOW", {
+      workflowId: input.workflowId,
+    })
+  }
+
+  const currentWorkflowHash = stableHash(currentWorkflow)
+  if (record.latestWorkflowHash && currentWorkflowHash !== record.latestWorkflowHash) {
+    throw new N8nBuilderError("V2 claimed workflow has changed since the last registry hash.", "V2_APPLY_WORKFLOW_STALE", {
+      workflowId: input.workflowId,
+      expectedWorkflowHash: record.latestWorkflowHash,
+      currentWorkflowHash,
+    })
+  }
+
+  const now = input.input.now?.() ?? new Date()
+  const workflowToUpdate: N8nWorkflow = {
+    ...input.preview.workflow,
+    active: false,
+  }
+  const updated = await input.input.api.updateWorkflow(input.workflowId, workflowToUpdate)
+  const workflowHash = stableHash(updated)
+  const url = workflowUrl(input.input.config.baseUrl, updated.id)
+
+  await input.input.registry.upsert({
+    workflowId: updated.id,
+    name: updated.name,
+    url,
+    baseUrl: input.input.config.baseUrl,
+    claimMode: "full",
+    activeAtClaim: record.activeAtClaim,
+    managedBy: "opencode-n8n-builder-v2",
+    managedByVersion: input.input.config.pluginVersion,
+    latestPlanId: input.preview.planId,
+    latestPlanVersion: input.preview.planVersion,
+    latestWorkflowHash: workflowHash,
+    latestPreviewId: input.preview.previewId,
+    lastValidationStatus: input.preview.validationStatus,
+    lastUpdatedAt: now.toISOString(),
+  } satisfies V2RegistryRecord)
+
+  return {
+    workflowId: updated.id,
+    name: updated.name,
+    url,
+    mode: "update",
+    previewId: input.preview.previewId,
+    planId: input.preview.planId,
+    planVersion: input.preview.planVersion,
+    nodeCount: updated.nodes.length,
+    workflowHash,
+    validationStatus: input.preview.validationStatus,
+    warnings: [...input.preview.warnings, ...input.validationWarnings],
   }
 }
 
