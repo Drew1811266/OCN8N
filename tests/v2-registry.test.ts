@@ -66,6 +66,24 @@ describe("V2WorkflowRegistry", () => {
     expect((await registry.list()).map((item) => item.workflowId)).toEqual(["wf_a", "wf_b"])
   })
 
+  it("rejects invalid upsert records before writing a registry file", async () => {
+    const registry = new V2WorkflowRegistry(registryPath())
+    const invalidRecord = {
+      ...record(),
+      managedBy: "opencode-n8n-builder",
+    } as unknown as V2RegistryRecord
+
+    try {
+      await registry.upsert(invalidRecord)
+      throw new Error("Expected invalid registry upsert to throw.")
+    } catch (error) {
+      expect(error).toMatchObject({ code: "V2_REGISTRY_INVALID" })
+      expect((error as { details?: unknown }).details).toEqual({ reason: "invalid_record" })
+    }
+    expect(await registry.list()).toEqual([])
+    await expect(readFile(registryPath(), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("reads missing, malformed, and v1 registry files as empty", async () => {
     const registry = new V2WorkflowRegistry(registryPath())
     expect(await registry.list()).toEqual([])

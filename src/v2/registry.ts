@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { N8nBuilderError } from "../errors.js"
 import type { V2RegistryRecord } from "./types.js"
 
 type V2RegistryFile = {
@@ -18,6 +19,12 @@ export class V2WorkflowRegistry {
   }
 
   async upsert(record: V2RegistryRecord): Promise<void> {
+    if (!isV2RegistryRecord(record)) {
+      throw new N8nBuilderError("Invalid v2 registry record.", "V2_REGISTRY_INVALID", {
+        reason: "invalid_record",
+      })
+    }
+
     const file = await this.read()
     const workflows = file.workflows.filter((item) => item.workflowId !== record.workflowId)
     workflows.push(record)
