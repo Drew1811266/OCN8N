@@ -23,6 +23,12 @@ import type {
   V2CompiledPreview,
   V2CompilePreviewArgs,
   V2CompilePreviewResult,
+  V2ClaimedWorkflowSummary,
+  V2ClaimWorkflowAction,
+  V2ClaimWorkflowArgs,
+  V2ClaimWorkflowResult,
+  V2ClaimWorkflowRisk,
+  V2ClaimWorkflowRiskCode,
   V2CreatePlanArgs,
   V2CreatePlanResult,
   V2PatchPlanArgs,
@@ -289,6 +295,11 @@ describe("public package contract exports", () => {
       previewId: "123e4567-e89b-12d3-a456-426614174000",
       confirm: true,
     }
+    const claimArgs: V2ClaimWorkflowArgs = {
+      workflowId: "wf_1",
+      mode: "apply",
+      confirm: true,
+    }
     const mappingTrace: V2PreviewMappingTrace = {
       stepId: "step_receive",
       patternIds: ["pattern_trigger_1"],
@@ -362,6 +373,33 @@ describe("public package contract exports", () => {
       validationStatus: "passed",
       warnings: [],
     }
+    const claimAction: V2ClaimWorkflowAction = "claim_full"
+    const claimRiskCode: V2ClaimWorkflowRiskCode = "V1_OWNERSHIP_RESET"
+    const claimRisk: V2ClaimWorkflowRisk = {
+      code: claimRiskCode,
+      message: "Workflow has a v1 marker.",
+    }
+    const claimedSummary: V2ClaimedWorkflowSummary = {
+      nodeCount: 1,
+      connectionCount: 0,
+      triggerNodeTypes: ["n8n-nodes-base.webhook"],
+      credentialTypes: [],
+    }
+    const claimResult: V2ClaimWorkflowResult = {
+      workflowId: "wf_1",
+      name: "Orders",
+      url: "https://demo/workflow/wf_1",
+      mode: "apply",
+      eligible: true,
+      action: claimAction,
+      claimMode: "full",
+      active: false,
+      summary: claimedSummary,
+      risks: [claimRisk],
+      markerWritten: true,
+      registryWritten: true,
+      workflowHash: "workflow_hash",
+    }
     const registry: V2RegistryRecord = {
       workflowId: "wf_1",
       name: "Orders",
@@ -393,6 +431,7 @@ describe("public package contract exports", () => {
       validateArgs,
       compileArgs,
       applyArgs,
+      claimArgs,
       mappingTrace,
       simulation,
       previewWorkflow,
@@ -400,6 +439,11 @@ describe("public package contract exports", () => {
       compileResult,
       autoPreviewResult,
       applyResult,
+      claimAction,
+      claimRiskCode,
+      claimRisk,
+      claimedSummary,
+      claimResult,
       registry,
     }).toBeDefined()
   })

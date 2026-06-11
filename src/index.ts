@@ -27,6 +27,14 @@ export type {
 export type { ListManagedWorkflowsResult } from "./tools/list-managed-workflows.js"
 export type { V2ApplyArgs, V2ApplyResult } from "./tools/v2-apply.js"
 export type { V2AutoPreviewArgs, V2AutoPreviewResult } from "./tools/v2-auto-preview.js"
+export type {
+  V2ClaimedWorkflowSummary,
+  V2ClaimWorkflowAction,
+  V2ClaimWorkflowArgs,
+  V2ClaimWorkflowResult,
+  V2ClaimWorkflowRisk,
+  V2ClaimWorkflowRiskCode,
+} from "./tools/v2-claim-workflow.js"
 export type { V2CompilePreviewArgs, V2CompilePreviewResult } from "./tools/v2-compile-preview.js"
 export type { V2CreatePlanArgs, V2CreatePlanResult } from "./tools/v2-create-plan.js"
 export type { V2PatchPlanArgs, V2PatchPlanResult } from "./tools/v2-patch-plan.js"

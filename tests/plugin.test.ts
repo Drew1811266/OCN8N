@@ -95,6 +95,7 @@ describe("plugin exports", () => {
       "n8n_v2_validate_simulate",
       "n8n_v2_compile_preview",
       "n8n_v2_apply",
+      "n8n_v2_claim_workflow",
     ])
     expect(Object.keys(result.tool?.n8n_build_workflow.args ?? {})).toEqual(["prompt", "name"])
     expect(Object.keys(result.tool?.n8n_update_workflow.args ?? {})).toEqual(["workflowId", "prompt", "mode", "previewId"])
@@ -118,6 +119,7 @@ describe("plugin exports", () => {
     expect(Object.keys(result.tool?.n8n_v2_validate_simulate.args ?? {})).toEqual(["planId", "planVersion"])
     expect(Object.keys(result.tool?.n8n_v2_compile_preview.args ?? {})).toEqual(["planId", "planVersion"])
     expect(Object.keys(result.tool?.n8n_v2_apply.args ?? {})).toEqual(["previewId", "confirm"])
+    expect(Object.keys(result.tool?.n8n_v2_claim_workflow.args ?? {})).toEqual(["workflowId", "mode", "confirm"])
   })
 
   it("routes rollback update modes without requiring MCP configuration", async () => {
@@ -437,6 +439,81 @@ describe("plugin exports", () => {
             previewId: preview.previewId,
             planId: preview.planId,
             planVersion: preview.planVersion,
+          }),
+        )
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    })
+  })
+
+  it("claims an active workflow read-only through API config without requiring MCP configuration", async () => {
+    await withoutN8nEnv(async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-v2-claim-"))
+      const originalFetch = globalThis.fetch
+      const fetchMock = vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            id: "wf_active",
+            name: "Production Orders",
+            active: true,
+            nodes: [
+              {
+                name: "Webhook",
+                type: "n8n-nodes-base.webhook",
+                typeVersion: 2,
+                position: [0, 0],
+                parameters: {},
+              },
+            ],
+            connections: {},
+            settings: {},
+            tags: [],
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        )
+      })
+      globalThis.fetch = fetchMock as typeof fetch
+
+      try {
+        const plugin = createN8nBuilderPlugin({ version: "2.0.0" })
+        const result = await plugin(
+          mockPluginInput({
+            directory,
+            opencodeConfig: {
+              n8n: {
+                baseUrl: "https://demo/api/v1",
+                apiKey: "key",
+              },
+            },
+          }),
+        )
+
+        const output = parseToolOutput(
+          await result.tool?.n8n_v2_claim_workflow.execute(
+            { workflowId: "wf_active", mode: "apply", confirm: true },
+            {} as never,
+          ),
+        ) as { workflowId: string; action: string; claimMode: string; markerWritten: boolean; registryWritten: boolean }
+
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+        expect(fetchMock).toHaveBeenCalledWith(
+          "https://demo/api/v1/workflows/wf_active",
+          expect.objectContaining({
+            method: "GET",
+            headers: expect.objectContaining({ "X-N8N-API-KEY": "key" }),
+          }),
+        )
+        expect(output).toEqual(
+          expect.objectContaining({
+            workflowId: "wf_active",
+            action: "claim_read_only",
+            claimMode: "read_only",
+            markerWritten: false,
+            registryWritten: true,
           }),
         )
       } finally {

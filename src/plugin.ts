@@ -18,6 +18,7 @@ import { listManagedWorkflows } from "./tools/list-managed-workflows.js"
 import { updateWorkflow, type UpdateWorkflowArgs } from "./tools/update-workflow.js"
 import { applyV2Preview } from "./tools/v2-apply.js"
 import { autoPreviewV2Workflow } from "./tools/v2-auto-preview.js"
+import { claimV2Workflow, type V2ClaimWorkflowArgs } from "./tools/v2-claim-workflow.js"
 import { compileV2Preview } from "./tools/v2-compile-preview.js"
 import { createV2Plan } from "./tools/v2-create-plan.js"
 import { patchV2PlanTool } from "./tools/v2-patch-plan.js"
@@ -397,6 +398,29 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
             return jsonOutput("v2 n8n workflow preview applied", result)
           },
         }),
+
+        n8n_v2_claim_workflow: tool({
+          description: "Preview or apply explicit v2 claim/import of an existing n8n workflow.",
+          args: {
+            workflowId: tool.schema.string().min(1),
+            mode: tool.schema.enum(["preview", "apply"]),
+            confirm: tool.schema.boolean().optional(),
+          },
+          async execute(args) {
+            const resolved = await apiDeps()
+            const result = await claimV2Workflow({
+              args: toV2ClaimWorkflowArgs(args),
+              config: {
+                baseUrl: resolved.config.baseUrl,
+                pluginVersion: resolved.config.pluginVersion,
+              },
+              api: resolved.api,
+              registry: resolved.v2Registry,
+            })
+
+            return jsonOutput("v2 n8n workflow claim", result)
+          },
+        }),
       },
     }
   }
@@ -451,6 +475,25 @@ function toClaimWorkflowArgs(args: {
   mode: "preview" | "apply"
   confirm?: boolean
 }): ClaimWorkflowArgs {
+  if (args.mode === "preview") {
+    return {
+      workflowId: args.workflowId,
+      mode: args.mode,
+    }
+  }
+
+  return {
+    workflowId: args.workflowId,
+    mode: args.mode,
+    confirm: args.confirm,
+  }
+}
+
+function toV2ClaimWorkflowArgs(args: {
+  workflowId: string
+  mode: "preview" | "apply"
+  confirm?: boolean
+}): V2ClaimWorkflowArgs {
   if (args.mode === "preview") {
     return {
       workflowId: args.workflowId,
