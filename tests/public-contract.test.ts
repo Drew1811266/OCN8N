@@ -15,6 +15,7 @@ import type {
   UpdatePreview,
   UpdateWorkflowArgs,
   UpdateWorkflowResult,
+  V2ArtifactPaths,
   Warning,
   WorkflowDiff,
   WorkflowRegistryRecord,
@@ -98,6 +99,16 @@ describe("public package contract exports", () => {
       proposedWorkflow: workflow,
       diff,
     }
+    const v2Paths: V2ArtifactPaths = {
+      rootDir: "/tmp/project/.opencode/n8n-v2",
+      plansDir: "/tmp/project/.opencode/n8n-v2/plans",
+      simulationsDir: "/tmp/project/.opencode/n8n-v2/simulations",
+      previewsDir: "/tmp/project/.opencode/n8n-v2/previews",
+      registryPath: "/tmp/project/.opencode/n8n-v2/registry/workflows.json",
+      claimsDir: "/tmp/project/.opencode/n8n-v2/claims",
+      runsDir: "/tmp/project/.opencode/n8n-v2/runs",
+      exportsDir: "/tmp/project/.opencode/n8n-v2/exports",
+    }
 
     expect({
       buildArgs,
@@ -117,6 +128,7 @@ describe("public package contract exports", () => {
       diff,
       registry,
       preview,
+      v2Paths,
     }).toBeDefined()
   })
 })

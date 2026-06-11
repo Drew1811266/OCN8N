@@ -35,6 +35,7 @@ export type {
   CredentialSetupAction,
   ManagedMarker,
   PluginConfig,
+  V2ArtifactPaths,
   Warning,
 } from "./types.js"
 export type { WorkflowRegistryRecord } from "./registry.js"

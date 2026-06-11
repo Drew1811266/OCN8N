@@ -188,6 +188,9 @@ function createTestContext(input: {
     config: {
       ...baseConfig,
       workspaceDir,
+      registryPath: path.join(workspaceDir, ".opencode", "n8n-workflows.json"),
+      previewDir: path.join(workspaceDir, ".opencode", "n8n-update-previews"),
+      v2: v2ArtifactPaths(workspaceDir),
     },
     api: {
       deleteWorkflow: input.deleteWorkflow ?? (async () => {}),
