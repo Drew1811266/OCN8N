@@ -38,6 +38,19 @@ describe("v2 plan service foundation", () => {
     expect(review.simulationCoverage).toContain("1 example(s) available for control-flow and field-flow checks.")
   })
 
+  it("copies trace entries into review assumptions", () => {
+    const plan = createInitialV2Plan({ prompt: "Create a webhook workflow" })
+    const review = reviewV2Plan({
+      planId: "123e4567-e89b-12d3-a456-426614174000",
+      planVersion: 1,
+      plan,
+    })
+
+    review.assumptions.push("mutated review")
+
+    expect(plan.trace).not.toContain("mutated review")
+  })
+
   it("patches a plan by appending trace and warning metadata", () => {
     const plan = createInitialV2Plan({ prompt: "Create a webhook workflow" })
     const patched = patchV2Plan({
@@ -88,6 +101,58 @@ describe("v2 plan service foundation", () => {
     expect(result.issues.map((issue) => issue.code)).toEqual([
       "V2_OUTPUT_REQUIRED",
       "V2_TEST_EXAMPLE_REQUIRED",
+      "V2_OUTPUT_REF_UNKNOWN",
     ])
+  })
+
+  it("returns validation errors for dangling plan references", () => {
+    const plan = createInitialV2Plan({ prompt: "Create a webhook workflow" })
+    const result = validateAndSimulateV2Plan({
+      planId: "123e4567-e89b-12d3-a456-426614174000",
+      planVersion: 1,
+      plan: {
+        ...plan,
+        steps: [
+          {
+            ...plan.steps[0],
+            patternIds: ["pattern_missing"],
+            inputRefs: ["input_missing"],
+            outputRefs: ["output_missing"],
+          },
+          plan.steps[1],
+        ],
+        branches: [
+          {
+            id: "branch_missing",
+            sourceStepId: "step_missing_source",
+            condition: "missing",
+            targetStepId: "step_missing_target",
+          },
+        ],
+        loops: [
+          {
+            id: "loop_missing",
+            sourceStepId: "step_missing_loop",
+            mode: "per_item",
+            maxIterations: 1,
+            termination: "done",
+          },
+        ],
+      },
+      checkedAt: "2026-06-11T00:00:00.000Z",
+    })
+
+    expect(result.status).toBe("failed")
+    expect(result.issues.map((issue) => issue.code)).toEqual([
+      "V2_PATTERN_REF_UNKNOWN",
+      "V2_INPUT_REF_UNKNOWN",
+      "V2_OUTPUT_REF_UNKNOWN",
+      "V2_BRANCH_STEP_UNKNOWN",
+      "V2_BRANCH_STEP_UNKNOWN",
+      "V2_LOOP_STEP_UNKNOWN",
+    ])
+    expect(result.issues[0]).toMatchObject({ code: "V2_PATTERN_REF_UNKNOWN", stepId: "step_trigger" })
+    expect(result.issues[1]).toMatchObject({ code: "V2_INPUT_REF_UNKNOWN", stepId: "step_trigger" })
+    expect(result.issues[2]).toMatchObject({ code: "V2_OUTPUT_REF_UNKNOWN", stepId: "step_trigger" })
   })
 })

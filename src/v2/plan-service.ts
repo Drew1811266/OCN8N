@@ -120,7 +120,7 @@ export function reviewV2Plan(input: ReviewV2PlanInput): V2PlanReview {
       confidence: pattern.confidence,
       riskLevel: pattern.riskLevel,
     })),
-    assumptions: input.plan.trace,
+    assumptions: [...input.plan.trace],
     risks: input.plan.warnings.map((warning) => warning.message),
     openQuestions: input.plan.confidence === "low" ? ["Plan confidence is low; review required before compile."] : [],
     simulationCoverage: [
@@ -214,6 +214,74 @@ function validatePlan(plan: V2Plan): V2ValidationIssue[] {
       message: "Plan requires at least one test example for simulation.",
       severity: "error",
     })
+  }
+
+  const patternIds = new Set(plan.patterns.map((pattern) => pattern.id))
+  const inputRefs = new Set([...plan.inputs.map((input) => input.id), ...plan.entities.map((entity) => entity.name)])
+  const outputRefs = new Set([...plan.outputs.map((output) => output.id), ...plan.entities.map((entity) => entity.name)])
+  const stepIds = new Set(plan.steps.map((step) => step.id))
+
+  for (const step of plan.steps) {
+    for (const patternId of step.patternIds) {
+      if (!patternIds.has(patternId)) {
+        issues.push({
+          code: "V2_PATTERN_REF_UNKNOWN",
+          message: `Step references unknown pattern "${patternId}".`,
+          severity: "error",
+          stepId: step.id,
+          patternId,
+        })
+      }
+    }
+
+    for (const inputRef of step.inputRefs) {
+      if (!inputRefs.has(inputRef)) {
+        issues.push({
+          code: "V2_INPUT_REF_UNKNOWN",
+          message: `Step references unknown input "${inputRef}".`,
+          severity: "error",
+          stepId: step.id,
+        })
+      }
+    }
+
+    for (const outputRef of step.outputRefs) {
+      if (!outputRefs.has(outputRef)) {
+        issues.push({
+          code: "V2_OUTPUT_REF_UNKNOWN",
+          message: `Step references unknown output "${outputRef}".`,
+          severity: "error",
+          stepId: step.id,
+        })
+      }
+    }
+  }
+
+  for (const branch of plan.branches) {
+    if (!stepIds.has(branch.sourceStepId)) {
+      issues.push({
+        code: "V2_BRANCH_STEP_UNKNOWN",
+        message: `Branch references unknown source step "${branch.sourceStepId}".`,
+        severity: "error",
+      })
+    }
+    if (!stepIds.has(branch.targetStepId)) {
+      issues.push({
+        code: "V2_BRANCH_STEP_UNKNOWN",
+        message: `Branch references unknown target step "${branch.targetStepId}".`,
+        severity: "error",
+      })
+    }
+  }
+
+  for (const loop of plan.loops) {
+    if (!stepIds.has(loop.sourceStepId)) {
+      issues.push({
+        code: "V2_LOOP_STEP_UNKNOWN",
+        message: `Loop references unknown source step "${loop.sourceStepId}".`,
+        severity: "error",
+      })
+    }
   }
 
   return issues
