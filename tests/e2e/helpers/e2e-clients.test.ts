@@ -12,6 +12,21 @@ import {
   type E2eContext,
 } from "./e2e-clients.js"
 
+function v2ArtifactPaths(workspaceDir: string): PluginConfig["v2"] {
+  const rootDir = `${workspaceDir}/.opencode/n8n-v2`
+
+  return {
+    rootDir,
+    plansDir: `${rootDir}/plans`,
+    simulationsDir: `${rootDir}/simulations`,
+    previewsDir: `${rootDir}/previews`,
+    registryPath: `${rootDir}/registry/workflows.json`,
+    claimsDir: `${rootDir}/claims`,
+    runsDir: `${rootDir}/runs`,
+    exportsDir: `${rootDir}/exports`,
+  }
+}
+
 const baseConfig: PluginConfig = {
   baseUrl: "http://127.0.0.1:5678/api/v1",
   apiKey: "api-secret",
@@ -20,6 +35,7 @@ const baseConfig: PluginConfig = {
   workspaceDir: "/tmp/ocn8n-e2e-test",
   registryPath: "/tmp/ocn8n-e2e-test/.opencode/n8n-workflows.json",
   previewDir: "/tmp/ocn8n-e2e-test/.opencode/n8n-update-previews",
+  v2: v2ArtifactPaths("/tmp/ocn8n-e2e-test"),
   credentialEnv: {},
   pluginVersion: "0.3.0-e2e",
 }

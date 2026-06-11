@@ -5,6 +5,21 @@ import type { PluginConfig } from "../src/types.js"
 import { workflowPlanSchema, type WorkflowDraft, type WorkflowPlan } from "../src/workflow-plan.js"
 import { simpleWebhookPlan } from "./fixtures/workflows.js"
 
+function v2ArtifactPaths(workspaceDir: string): PluginConfig["v2"] {
+  const rootDir = `${workspaceDir}/.opencode/n8n-v2`
+
+  return {
+    rootDir,
+    plansDir: `${rootDir}/plans`,
+    simulationsDir: `${rootDir}/simulations`,
+    previewsDir: `${rootDir}/previews`,
+    registryPath: `${rootDir}/registry/workflows.json`,
+    claimsDir: `${rootDir}/claims`,
+    runsDir: `${rootDir}/runs`,
+    exportsDir: `${rootDir}/exports`,
+  }
+}
+
 const config: PluginConfig = {
   baseUrl: "https://demo/api/v1",
   apiKey: "key",
@@ -12,6 +27,7 @@ const config: PluginConfig = {
   workspaceDir: "/tmp/project",
   registryPath: "/tmp/project/.opencode/n8n-workflows.json",
   previewDir: "/tmp/project/.opencode/n8n-update-previews",
+  v2: v2ArtifactPaths("/tmp/project"),
   credentialEnv: {},
   pluginVersion: "0.1.0",
 }
