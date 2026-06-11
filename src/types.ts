@@ -32,6 +32,17 @@ export type CredentialSetupAction = {
   docs?: string[]
 }
 
+export type V2ArtifactPaths = {
+  rootDir: string
+  plansDir: string
+  simulationsDir: string
+  previewsDir: string
+  registryPath: string
+  claimsDir: string
+  runsDir: string
+  exportsDir: string
+}
+
 export type PluginConfig = {
   baseUrl: string
   apiKey: string
@@ -40,6 +51,7 @@ export type PluginConfig = {
   workspaceDir: string
   registryPath: string
   previewDir: string
+  v2: V2ArtifactPaths
   credentialEnv: Record<string, CredentialEnvMapping>
   defaultProjectId?: string
   defaultFolderId?: string

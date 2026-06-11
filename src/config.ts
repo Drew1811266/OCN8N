@@ -27,6 +27,7 @@ export type LocalPluginConfig = Pick<
   | "workspaceDir"
   | "registryPath"
   | "previewDir"
+  | "v2"
   | "credentialEnv"
   | "defaultProjectId"
   | "defaultFolderId"
@@ -225,6 +226,21 @@ export function loadLocalPluginConfig(input: LoadPluginConfigInput): LocalPlugin
   return localConfigFromInput(input, n8n)
 }
 
+function v2ArtifactPaths(workspaceDir: string): PluginConfig["v2"] {
+  const rootDir = path.join(workspaceDir, ".opencode", "n8n-v2")
+
+  return {
+    rootDir,
+    plansDir: path.join(rootDir, "plans"),
+    simulationsDir: path.join(rootDir, "simulations"),
+    previewsDir: path.join(rootDir, "previews"),
+    registryPath: path.join(rootDir, "registry", "workflows.json"),
+    claimsDir: path.join(rootDir, "claims"),
+    runsDir: path.join(rootDir, "runs"),
+    exportsDir: path.join(rootDir, "exports"),
+  }
+}
+
 function localConfigFromInput(
   input: LoadPluginConfigInput,
   n8n: NonNullable<OpencodeN8nConfig["n8n"]>,
@@ -233,6 +249,7 @@ function localConfigFromInput(
     workspaceDir: input.workspaceDir,
     registryPath: path.join(input.workspaceDir, ".opencode", "n8n-workflows.json"),
     previewDir: path.join(input.workspaceDir, ".opencode", "n8n-update-previews"),
+    v2: v2ArtifactPaths(input.workspaceDir),
     credentialEnv: n8n.credentialEnv ?? {},
     defaultProjectId: n8n.projectId,
     defaultFolderId: n8n.folderId,

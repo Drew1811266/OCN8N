@@ -34,6 +34,16 @@ describe("loadPluginConfig", () => {
     expect(config.workspaceDir).toBe("/tmp/project")
     expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
     expect(config.previewDir).toBe("/tmp/project/.opencode/n8n-update-previews")
+    expect(config.v2).toEqual({
+      rootDir: "/tmp/project/.opencode/n8n-v2",
+      plansDir: "/tmp/project/.opencode/n8n-v2/plans",
+      simulationsDir: "/tmp/project/.opencode/n8n-v2/simulations",
+      previewsDir: "/tmp/project/.opencode/n8n-v2/previews",
+      registryPath: "/tmp/project/.opencode/n8n-v2/registry/workflows.json",
+      claimsDir: "/tmp/project/.opencode/n8n-v2/claims",
+      runsDir: "/tmp/project/.opencode/n8n-v2/runs",
+      exportsDir: "/tmp/project/.opencode/n8n-v2/exports",
+    })
     expect(config.credentialEnv).toEqual({})
     expect(config.pluginVersion).toBe("1.0.0")
   })
@@ -51,6 +61,7 @@ describe("loadPluginConfig", () => {
     expect(config.baseUrl).toBe("https://demo.app.n8n.cloud/api/v1")
     expect(config.apiKey).toBe("n8n_api_key")
     expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
+    expect(config.v2.rootDir).toBe("/tmp/project/.opencode/n8n-v2")
   })
 
   it("loads API config while ignoring malformed MCP token config", () => {
