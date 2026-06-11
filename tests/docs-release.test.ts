@@ -154,6 +154,8 @@ describe("release documentation", () => {
       "V2ArtifactPaths",
       "N8nBuilderError",
       "v2-claimed inactive workflow",
+      "MCP validation after compile",
+      "mcpValidationStatus",
     ]) {
       expect(publicContract).toContain(term)
     }

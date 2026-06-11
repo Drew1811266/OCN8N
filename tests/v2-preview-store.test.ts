@@ -81,6 +81,7 @@ function previewInput(overrides: Partial<SaveV2CompiledPreviewInput> = {}): Save
       },
     ],
     validationStatus: "passed",
+    mcpValidationStatus: "not_configured",
     warnings: [],
     createdAt: "2026-06-11T00:00:00.000Z",
     ...overrides,

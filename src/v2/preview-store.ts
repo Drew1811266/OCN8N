@@ -14,6 +14,8 @@ export type V2PreviewMappingTrace = {
   notes: string[]
 }
 
+export type V2McpValidationStatus = "not_configured" | "passed" | "warning"
+
 export type V2CompiledPreview = {
   previewId: string
   planId: string
@@ -22,6 +24,7 @@ export type V2CompiledPreview = {
   workflowHash: string
   mappingTrace: V2PreviewMappingTrace[]
   validationStatus: V2SimulationResult["status"]
+  mcpValidationStatus: V2McpValidationStatus
   warnings: V2Warning[]
   createdAt: string
 }
@@ -111,9 +114,14 @@ function isV2CompiledPreview(value: unknown): value is V2CompiledPreview {
     typeof value.workflowHash === "string" &&
     isArrayOf(value.mappingTrace, isV2PreviewMappingTrace) &&
     (value.validationStatus === "passed" || value.validationStatus === "failed" || value.validationStatus === "warning") &&
+    isV2McpValidationStatus(value.mcpValidationStatus) &&
     isArrayOf(value.warnings, isV2Warning) &&
     typeof value.createdAt === "string"
   )
+}
+
+function isV2McpValidationStatus(value: unknown): value is V2McpValidationStatus {
+  return value === "not_configured" || value === "passed" || value === "warning"
 }
 
 function isV2PreviewMappingTrace(value: unknown): value is V2PreviewMappingTrace {

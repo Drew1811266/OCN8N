@@ -16,6 +16,7 @@ import type {
   V2CompiledPreview,
   V2CompilePreviewArgs,
   V2CompilePreviewResult,
+  V2McpValidationStatus,
   V2CreatePlanArgs,
   V2CreatePlanResult,
   V2PatchPlanArgs,
@@ -198,6 +199,7 @@ describe("public package contract exports", () => {
       planId: version.planId,
       planVersion: version.planVersion,
     }
+    const mcpValidationStatus: V2McpValidationStatus = "not_configured"
     const applyArgs: V2ApplyArgs = {
       previewId: "123e4567-e89b-12d3-a456-426614174000",
       confirm: true,
@@ -236,6 +238,7 @@ describe("public package contract exports", () => {
       workflowHash: "workflow_hash",
       mappingTrace: [mappingTrace],
       validationStatus: "passed",
+      mcpValidationStatus,
       warnings: [],
       createdAt: "2026-06-11T00:00:00.000Z",
     }
@@ -253,6 +256,7 @@ describe("public package contract exports", () => {
       nodeCount: workflow.nodes.length,
       workflowHash: previewArtifact.workflowHash,
       validationStatus: "passed",
+      mcpValidationStatus,
       mappingTrace: [mappingTrace],
       warnings: [],
     }
@@ -265,6 +269,7 @@ describe("public package contract exports", () => {
       nodeCount: workflow.nodes.length,
       workflowHash: previewArtifact.workflowHash,
       validationStatus: "passed",
+      mcpValidationStatus,
       confidence: "high",
       riskLevel: "low",
       review,
@@ -412,6 +417,7 @@ describe("public package contract exports", () => {
       patchResult,
       validateArgs,
       compileArgs,
+      mcpValidationStatus,
       applyArgs,
       updateApplyArgs,
       claimArgs,

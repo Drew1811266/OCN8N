@@ -1,6 +1,7 @@
 import { tool, type Plugin, type PluginInput, type ToolResult } from "@opencode-ai/plugin"
 import { loadApiPluginConfig, loadLocalPluginConfig } from "./config.js"
 import { N8nApiClient } from "./n8n-api-client.js"
+import { N8nMcpClient } from "./n8n-mcp-client.js"
 import { applyV2Preview } from "./tools/v2-apply.js"
 import { autoPreviewV2Workflow } from "./tools/v2-auto-preview.js"
 import { claimV2Workflow, type V2ClaimWorkflowArgs } from "./tools/v2-claim-workflow.js"
@@ -41,9 +42,16 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
         workspaceDir: directory,
         pluginVersion: version,
       })
+      const mcp = config.mcpUrl
+        ? new N8nMcpClient({
+            mcpUrl: config.mcpUrl,
+            authToken: config.mcpToken,
+          })
+        : undefined
 
       return {
         config,
+        mcp,
         v2PlanStore: new V2PlanStore(config.v2.plansDir),
         v2PreviewStore: new V2PreviewStore(config.v2.previewsDir),
         v2RunStore: new V2RunStore(config.v2.runsDir),
@@ -88,6 +96,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
               planStore: resolved.v2PlanStore,
               previewStore: resolved.v2PreviewStore,
               pluginVersion: resolved.config.pluginVersion,
+              mcp: resolved.mcp,
             })
 
             return jsonOutput("v2 n8n workflow auto preview compiled", result)
@@ -176,6 +185,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
               planStore: resolved.v2PlanStore,
               previewStore: resolved.v2PreviewStore,
               pluginVersion: resolved.config.pluginVersion,
+              mcp: resolved.mcp,
             })
 
             return jsonOutput("v2 n8n workflow preview compiled", result)

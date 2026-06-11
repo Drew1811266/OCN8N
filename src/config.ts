@@ -32,7 +32,8 @@ export type LocalPluginConfig = Pick<
   | "defaultProjectId"
   | "defaultFolderId"
   | "pluginVersion"
->
+> &
+  Partial<Pick<PluginConfig, "mcpUrl" | "mcpToken">>
 
 export type ApiPluginConfig = Omit<PluginConfig, "mcpUrl" | "mcpToken">
 
@@ -223,7 +224,7 @@ export function loadLocalPluginConfig(input: LoadPluginConfigInput): LocalPlugin
   const opencode = asOpencodeN8nConfig(input.opencodeConfig)
   const n8n = opencode.n8n ?? {}
 
-  return localConfigFromInput(input, n8n)
+  return localConfigFromInput(input, n8n, { includeMcp: true })
 }
 
 function v2ArtifactPaths(workspaceDir: string): PluginConfig["v2"] {
@@ -244,6 +245,7 @@ function v2ArtifactPaths(workspaceDir: string): PluginConfig["v2"] {
 function localConfigFromInput(
   input: LoadPluginConfigInput,
   n8n: NonNullable<OpencodeN8nConfig["n8n"]>,
+  options: { includeMcp?: boolean } = {},
 ): LocalPluginConfig {
   return {
     workspaceDir: input.workspaceDir,
@@ -254,6 +256,22 @@ function localConfigFromInput(
     defaultProjectId: n8n.projectId,
     defaultFolderId: n8n.folderId,
     pluginVersion: input.pluginVersion ?? "1.0.0",
+    ...(options.includeMcp ? localMcpConfigFromInput(input, n8n) : {}),
+  }
+}
+
+function localMcpConfigFromInput(
+  input: LoadPluginConfigInput,
+  n8n: NonNullable<OpencodeN8nConfig["n8n"]>,
+): Partial<Pick<PluginConfig, "mcpUrl" | "mcpToken">> {
+  const mcpUrl = n8n.mcpUrl ?? input.env.N8N_MCP_URL
+  if (!mcpUrl) return {}
+
+  const mcpToken = readOpencodeMcpToken(input.opencodeConfig) ?? input.env.N8N_MCP_TOKEN
+
+  return {
+    mcpUrl,
+    ...(mcpToken ? { mcpToken } : {}),
   }
 }
 

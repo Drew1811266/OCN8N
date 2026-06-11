@@ -258,6 +258,104 @@ describe("plugin exports", () => {
     })
   })
 
+  it("runs MCP workflow validation during configured local v2 compile preview", async () => {
+    await withoutN8nEnv(async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-v2-mcp-"))
+      const plugin = createN8nBuilderPlugin()
+      const result = await plugin(
+        mockPluginInput({
+          directory,
+          opencodeConfig: {
+            n8n: {
+              mcpUrl: "https://mcp.example/rpc",
+              mcpToken: "mcp_token",
+            },
+          },
+        }),
+      )
+
+      const created = parseToolOutput(
+        await result.tool?.n8n_v2_create_plan.execute(
+          {
+            prompt:
+              "Create a webhook order workflow that maps fields, branches by status, calls an external fulfillment API, retries failures, and responds to the webhook.",
+            name: "MCP validated orders",
+          },
+          {} as never,
+        ),
+      ) as { planId: string; planVersion: number }
+
+      const originalFetch = globalThis.fetch
+      const fetchMock = vi.fn(async (_input: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          id?: string
+          params?: { name?: string; arguments?: { code?: string } }
+        }
+
+        expect(body.params?.name).toBe("validate_workflow")
+        expect(body.params?.arguments?.code).toContain("new Workflow")
+
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    valid: true,
+                    warnings: [
+                      {
+                        code: "NODE_PARAMETER_OPTIONAL",
+                        message: "Optional response field should be reviewed.",
+                      },
+                    ],
+                    errors: [],
+                  }),
+                },
+              ],
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        )
+      })
+      globalThis.fetch = fetchMock as typeof fetch
+
+      try {
+        const compiled = parseToolOutput(
+          await result.tool?.n8n_v2_compile_preview.execute(
+            { planId: created.planId, planVersion: created.planVersion },
+            {} as never,
+          ),
+        ) as { mcpValidationStatus: string; warnings: Array<{ code: string; message: string }> }
+
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+        expect(fetchMock).toHaveBeenCalledWith(
+          "https://mcp.example/rpc",
+          expect.objectContaining({
+            method: "POST",
+            headers: expect.objectContaining({ Authorization: "Bearer mcp_token" }),
+          }),
+        )
+        expect(compiled.mcpValidationStatus).toBe("warning")
+        expect(compiled.warnings).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              code: "MCP_NODE_PARAMETER_OPTIONAL",
+              message: "Optional response field should be reviewed.",
+            }),
+          ]),
+        )
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    })
+  })
+
   it("applies a v2 preview through API config without requiring MCP configuration", async () => {
     await withoutN8nEnv(async () => {
       const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-v2-apply-"))

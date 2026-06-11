@@ -1,15 +1,15 @@
 # 配置指南
 
-本插件同时使用 n8n public REST API 和 n8n MCP。REST API 负责 workflow、credential、activation 和 execution diagnostics；MCP 负责动态读取节点文档、SDK 指南和 workflow validation。
+v2 默认工具分为 local-only、API write 和可选 MCP validation 三类。plan、review、patch、validate/simulate、compile preview、auto preview 和 dry-run trial 可以在没有 n8n API key 的本地 workspace 中运行。`apply`、`claim_workflow` 和 `reverse_plan` 需要 n8n public REST API。compile preview 和 auto preview 可以额外使用 n8n MCP 进行保存前 workflow validation。
 
 ## 环境变量
 
-- `N8N_BASE_URL`：n8n REST API base URL，例如 `https://your-instance.app.n8n.cloud/api/v1` 或 `http://127.0.0.1:5678/api/v1`。
-- `N8N_API_KEY`：n8n public API key。readiness diagnostics 需要 execution read/list scope；activation/deactivation 需要 workflow activate/deactivate scope。
-- `N8N_MCP_URL`：n8n MCP endpoint。build 和 update preview 需要它。
+- `N8N_BASE_URL`：n8n REST API base URL，例如 `https://your-instance.app.n8n.cloud/api/v1` 或 `http://127.0.0.1:5678/api/v1`。`n8n_v2_apply`、`n8n_v2_claim_workflow` 和 `n8n_v2_reverse_plan` 需要它。
+- `N8N_API_KEY`：n8n public API key。`apply` 需要 workflow create/update scope；`claim_workflow` 和 `reverse_plan` 需要 workflow read scope。
+- `N8N_MCP_URL`：可选 n8n MCP endpoint。配置后，`n8n_v2_compile_preview` 和 `n8n_v2_auto_preview` 会在保存 preview 前调用 MCP `validate_workflow`。
 - `N8N_MCP_TOKEN`：可选。如果 MCP endpoint 要求 Bearer token，配置这个值。
 
-API-only 工具包括 `n8n_claim_workflow`、`n8n_check_workflow_readiness`、`n8n_inspect_workflow` 和 update apply/rollback apply。build 和 update preview 还需要 MCP，因为它们要检索节点文档和运行 MCP validation。
+未配置 MCP 时，compile preview 的 `mcpValidationStatus` 为 `not_configured`；配置 MCP 且 validation 通过时为 `passed`；MCP 只返回 warning 时为 `warning`，warning 会并入工具结果和 preview artifact。MCP validation failure 会返回 typed error 并阻止保存 preview。
 
 ## OpenCode Config
 

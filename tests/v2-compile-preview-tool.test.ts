@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { stableHash } from "../src/hash.js"
 import { compileV2Preview } from "../src/tools/v2-compile-preview.js"
 import { createInitialV2Plan } from "../src/v2/plan-service.js"
@@ -53,6 +53,7 @@ describe("compileV2Preview", () => {
         planId: version.planId,
         planVersion: version.planVersion,
         validationStatus: "passed",
+        mcpValidationStatus: "not_configured",
         nodeCount: 6,
         workflowName: "Order fulfillment",
       }),
@@ -67,6 +68,123 @@ describe("compileV2Preview", () => {
     const stored = await previews.get(result.previewId)
     expect(stored?.workflowHash).toBe(result.workflowHash)
     expect(stored?.workflowHash).toBe(stableHash(stored?.workflow))
+  })
+
+  it("validates a compiled preview through MCP when configured", async () => {
+    const plans = planStore()
+    const previews = previewStore()
+    const mcp = {
+      validateWorkflowCode: vi.fn().mockResolvedValue({
+        valid: true,
+        nodeCount: 6,
+        warnings: [
+          {
+            code: "NODE_PARAMETER_OPTIONAL",
+            message: "Optional response field is not configured.",
+            nodeName: "Respond to Webhook",
+          },
+        ],
+        errors: [],
+      }),
+    }
+    const version = await plans.saveInitial({
+      plan: createInitialV2Plan({
+        name: "Order fulfillment",
+        prompt:
+          "Create a webhook order workflow that maps fields, branches by status with a default path, calls an external fulfillment API with API key auth and mock response schema, retries failures, sends Slack notification, writes the result, and responds to the webhook.",
+      }),
+      createdAt: "2026-06-11T00:00:00.000Z",
+      summary: "Initial plan",
+    })
+
+    const result = await compileV2Preview({
+      args: { planId: version.planId, planVersion: version.planVersion },
+      planStore: plans,
+      previewStore: previews,
+      pluginVersion: "2.0.0",
+      mcp,
+      now: () => new Date("2026-06-11T00:10:00.000Z"),
+    })
+
+    expect(mcp.validateWorkflowCode).toHaveBeenCalledTimes(1)
+    expect(mcp.validateWorkflowCode.mock.calls[0]?.[0]).toContain("new Workflow")
+    expect(result.mcpValidationStatus).toBe("warning")
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "MCP_NODE_PARAMETER_OPTIONAL",
+          message: "Optional response field is not configured.",
+        }),
+      ]),
+    )
+
+    const stored = await previews.get(result.previewId)
+    expect(stored?.warnings).toEqual(result.warnings)
+  })
+
+  it("marks configured MCP validation as passed when it returns no warnings", async () => {
+    const plans = planStore()
+    const previews = previewStore()
+    const mcp = {
+      validateWorkflowCode: vi.fn().mockResolvedValue({
+        valid: true,
+        warnings: [],
+        errors: [],
+      }),
+    }
+    const version = await plans.saveInitial({
+      plan: createInitialV2Plan({
+        prompt:
+          "Create a webhook order workflow that maps fields, branches by status, calls an external fulfillment API, retries failures, and responds to the webhook.",
+      }),
+      createdAt: "2026-06-11T00:00:00.000Z",
+      summary: "Initial plan",
+    })
+
+    const result = await compileV2Preview({
+      args: { planId: version.planId, planVersion: version.planVersion },
+      planStore: plans,
+      previewStore: previews,
+      pluginVersion: "2.0.0",
+      mcp,
+    })
+
+    expect(mcp.validateWorkflowCode).toHaveBeenCalledTimes(1)
+    expect(result.mcpValidationStatus).toBe("passed")
+    expect(result.warnings.some((warning) => warning.code.startsWith("MCP_"))).toBe(false)
+  })
+
+  it("blocks preview persistence when MCP validation fails", async () => {
+    const plans = planStore()
+    const previews = previewStore()
+    const version = await plans.saveInitial({
+      plan: createInitialV2Plan({
+        prompt:
+          "Create a webhook order workflow that maps fields, branches by status, calls an external fulfillment API, retries failures, and responds to the webhook.",
+      }),
+      createdAt: "2026-06-11T00:00:00.000Z",
+      summary: "Initial plan",
+    })
+
+    await expect(
+      compileV2Preview({
+        args: { planId: version.planId, planVersion: version.planVersion },
+        planStore: plans,
+        previewStore: previews,
+        pluginVersion: "2.0.0",
+        mcp: {
+          validateWorkflowCode: vi.fn().mockResolvedValue({
+            valid: false,
+            nodeCount: 6,
+            warnings: [],
+            errors: ["Webhook node path is invalid."],
+          }),
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "MCP_WORKFLOW_VALIDATION_FAILED",
+      details: { errors: ["Webhook node path is invalid."] },
+    })
   })
 
   it("throws typed errors for missing and invalid plan versions", async () => {

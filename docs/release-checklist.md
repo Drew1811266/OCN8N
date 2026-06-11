@@ -37,6 +37,7 @@
 - [ ] 默认插件入口只暴露 `n8n_v2_reverse_plan`。
 - [ ] 默认插件入口只暴露 `n8n_v2_run_trial`。
 - [ ] `docs/public-contract.md` 覆盖 v2 tools、result types、`V2ArtifactPaths`、`V2RegistryRecord`、`V2CompiledPreview` 和 `V2TrialRunArtifact`。
+- [ ] `docs/public-contract.md` 覆盖 `n8n_v2_compile_preview` 的 MCP validation after compile、`mcpValidationStatus` 和 MCP validation failure 阻断。
 - [ ] `docs/migration-v1-to-v2.md` 覆盖 v1 artifact 非迁移、full claim、read-only claim 和 no silent migration。
 - [ ] `docs/pattern-compatibility-matrix.md` 覆盖七个 pattern family 的 required variants、validation focus 和 core node combinations。
 - [ ] `docs/operations.md` 说明 `.opencode/n8n-v2/` artifact root 和 v1 artifact 不自动迁移。

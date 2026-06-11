@@ -26,7 +26,7 @@ export type {
   V2PatternCatalogEntry,
   V2PatternVariantCatalogEntry,
 } from "./v2/pattern-catalog.js"
-export type { V2CompiledPreview, V2PreviewMappingTrace } from "./v2/preview-store.js"
+export type { V2CompiledPreview, V2McpValidationStatus, V2PreviewMappingTrace } from "./v2/preview-store.js"
 export type { ReversePlanFromWorkflowInput, ReversePlanFromWorkflowResult, V2ReverseUnmappedNode } from "./v2/reverse-planner.js"
 export type { V2TrialExecutionMode, V2TrialRunArtifact, V2TrialRunMode } from "./v2/run-store.js"
 

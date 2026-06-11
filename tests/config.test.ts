@@ -48,6 +48,39 @@ describe("loadPluginConfig", () => {
     expect(config.pluginVersion).toBe("1.0.0")
   })
 
+  it("loads optional local MCP URL and token for v2 compile validation", () => {
+    const config = loadLocalPluginConfig({
+      env: {
+        N8N_MCP_URL: "https://env.example/mcp",
+        N8N_MCP_TOKEN: "env_token",
+      },
+      opencodeConfig: {
+        n8n: {
+          mcpUrl: "https://config.example/mcp",
+          mcpToken: "config_token",
+        },
+      },
+      workspaceDir: "/tmp/project",
+    })
+
+    expect(config.mcpUrl).toBe("https://config.example/mcp")
+    expect(config.mcpToken).toBe("config_token")
+  })
+
+  it("uses environment MCP settings for local v2 compile validation", () => {
+    const config = loadLocalPluginConfig({
+      env: {
+        N8N_MCP_URL: "https://env.example/mcp",
+        N8N_MCP_TOKEN: "env_token",
+      },
+      opencodeConfig: {},
+      workspaceDir: "/tmp/project",
+    })
+
+    expect(config.mcpUrl).toBe("https://env.example/mcp")
+    expect(config.mcpToken).toBe("env_token")
+  })
+
   it("loads API config without requiring MCP URL", () => {
     const config = loadApiPluginConfig({
       env: {
@@ -95,6 +128,21 @@ describe("loadPluginConfig", () => {
 
     expect(config.workspaceDir).toBe("/tmp/project")
     expect(config.registryPath).toBe("/tmp/project/.opencode/n8n-workflows.json")
+  })
+
+  it("rejects non-string local MCP token config when local MCP URL is configured", () => {
+    expect(() =>
+      loadLocalPluginConfig({
+        env: {},
+        opencodeConfig: {
+          n8n: {
+            mcpUrl: "https://config.example/mcp",
+            mcpToken: 123,
+          },
+        },
+        workspaceDir: "/tmp/project",
+      }),
+    ).toThrow("Invalid n8n configuration: n8n.mcpToken must be a string.")
   })
 
   it("throws a typed API config error when API settings are missing", () => {

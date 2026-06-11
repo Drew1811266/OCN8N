@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { autoPreviewV2Workflow } from "../src/tools/v2-auto-preview.js"
 import { V2PlanStore } from "../src/v2/plan-store.js"
 import { V2PreviewStore } from "../src/v2/preview-store.js"
@@ -47,6 +47,7 @@ describe("autoPreviewV2Workflow", () => {
         workflowName: "Order fulfillment",
         nodeCount: 7,
         validationStatus: "passed",
+        mcpValidationStatus: "not_configured",
         confidence: "medium",
         riskLevel: "medium",
       }),
@@ -65,6 +66,47 @@ describe("autoPreviewV2Workflow", () => {
     expect(storedPlan?.plan.intent.scope).toEqual(["Order fulfillment"])
     expect(storedPreview?.planId).toBe(result.planId)
     expect(storedPreview?.workflowHash).toBe(result.workflowHash)
+  })
+
+  it("passes configured MCP validation through compile during auto preview", async () => {
+    const plans = planStore()
+    const previews = previewStore()
+    const mcp = {
+      validateWorkflowCode: vi.fn().mockResolvedValue({
+        valid: true,
+        warnings: [
+          {
+            code: "NODE_PARAMETER_OPTIONAL",
+            message: "Optional field should be reviewed.",
+          },
+        ],
+        errors: [],
+      }),
+    }
+
+    const result = await autoPreviewV2Workflow({
+      args: {
+        name: "Order fulfillment",
+        prompt:
+          "Create a webhook order workflow that maps fields, filters invalid orders, branches by status with a default path, processes each item in batches, calls an external fulfillment API with API key auth and mock response schema, retries failures, sends Slack notification, writes the result, and responds to the webhook.",
+      },
+      planStore: plans,
+      previewStore: previews,
+      pluginVersion: "2.0.0",
+      mcp,
+      now: () => new Date("2026-06-11T01:00:00.000Z"),
+    })
+
+    expect(mcp.validateWorkflowCode).toHaveBeenCalledTimes(1)
+    expect(result.mcpValidationStatus).toBe("warning")
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "MCP_NODE_PARAMETER_OPTIONAL",
+          message: "Optional field should be reviewed.",
+        }),
+      ]),
+    )
   })
 
   it("rejects blank prompts before creating artifacts", async () => {

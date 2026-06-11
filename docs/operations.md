@@ -77,7 +77,7 @@
 - `planId`：必填。
 - `planVersion`：必填。
 
-行为：编译 workflow JSON，写入 `opencode-n8n-builder-v2` marker，生成 `V2PreviewMappingTrace`，保存 preview artifact。
+行为：编译 workflow JSON，写入 `opencode-n8n-builder-v2` marker，生成 `V2PreviewMappingTrace`，保存 preview artifact。如果配置了 `N8N_MCP_URL` 或 OpenCode config 的 `n8n.mcpUrl`，保存前会调用 MCP `validate_workflow`；返回的 `mcpValidationStatus` 为 `passed`、`warning` 或 `not_configured`。MCP warning 会进入 `warnings`，MCP validation failure 会阻止 preview 保存。
 
 写操作：写 `.opencode/n8n-v2/previews/<previewId>.json`，不写 n8n。
 

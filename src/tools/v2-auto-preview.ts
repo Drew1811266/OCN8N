@@ -1,6 +1,7 @@
 import { N8nBuilderError } from "../errors.js"
+import type { McpWorkflowValidator } from "../mcp-workflow-validation.js"
 import type { V2PlanStore } from "../v2/plan-store.js"
-import type { V2PreviewMappingTrace, V2PreviewStore } from "../v2/preview-store.js"
+import type { V2McpValidationStatus, V2PreviewMappingTrace, V2PreviewStore } from "../v2/preview-store.js"
 import type { V2Confidence, V2PlanReview, V2RiskLevel, V2SimulationResult, V2Warning } from "../v2/types.js"
 import { compileV2Preview, type V2CompilePreviewResult } from "./v2-compile-preview.js"
 import { createV2Plan, type V2CreatePlanArgs } from "./v2-create-plan.js"
@@ -18,6 +19,7 @@ export type V2AutoPreviewResult = {
   nodeCount: number
   workflowHash: string
   validationStatus: V2SimulationResult["status"]
+  mcpValidationStatus: V2McpValidationStatus
   confidence: V2Confidence
   riskLevel: V2RiskLevel
   review: V2PlanReview
@@ -31,6 +33,7 @@ export async function autoPreviewV2Workflow(input: {
   planStore: V2PlanStore
   previewStore: V2PreviewStore
   pluginVersion: string
+  mcp?: McpWorkflowValidator
   now?: () => Date
 }): Promise<V2AutoPreviewResult> {
   if (input.args.prompt.trim().length === 0) {
@@ -57,6 +60,7 @@ export async function autoPreviewV2Workflow(input: {
     planStore: input.planStore,
     previewStore: input.previewStore,
     pluginVersion: input.pluginVersion,
+    mcp: input.mcp,
     now: input.now,
   })
 
@@ -69,6 +73,7 @@ export async function autoPreviewV2Workflow(input: {
     nodeCount: preview.nodeCount,
     workflowHash: preview.workflowHash,
     validationStatus: preview.validationStatus,
+    mcpValidationStatus: preview.mcpValidationStatus,
     confidence: created.confidence,
     riskLevel: created.riskLevel,
     review,

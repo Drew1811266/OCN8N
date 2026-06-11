@@ -1,10 +1,13 @@
 import { N8nBuilderError } from "../errors.js"
-import { validateWorkflowForSave, type WorkflowIssue } from "../validator.js"
+import { validateWorkflowWithMcp, type McpWorkflowValidator } from "../mcp-workflow-validation.js"
+import { validateWorkflowForSave } from "../validator.js"
 import { validateAndSimulateV2Plan } from "../v2/plan-service.js"
 import type { V2PlanStore } from "../v2/plan-store.js"
-import type { V2PreviewMappingTrace, V2PreviewStore } from "../v2/preview-store.js"
+import type { V2McpValidationStatus, V2PreviewMappingTrace, V2PreviewStore } from "../v2/preview-store.js"
 import { compileV2PlanToWorkflowPreview } from "../v2/workflow-compiler.js"
 import type { V2SimulationResult, V2Warning } from "../v2/types.js"
+
+export type { V2McpValidationStatus }
 
 export type V2CompilePreviewArgs = {
   planId: string
@@ -19,6 +22,7 @@ export type V2CompilePreviewResult = {
   nodeCount: number
   workflowHash: string
   validationStatus: V2SimulationResult["status"]
+  mcpValidationStatus: V2McpValidationStatus
   mappingTrace: V2PreviewMappingTrace[]
   warnings: V2Warning[]
 }
@@ -28,6 +32,7 @@ export async function compileV2Preview(input: {
   planStore: V2PlanStore
   previewStore: V2PreviewStore
   pluginVersion: string
+  mcp?: McpWorkflowValidator
   now?: () => Date
 }): Promise<V2CompilePreviewResult> {
   const now = input.now ?? (() => new Date())
@@ -73,13 +78,26 @@ export async function compileV2Preview(input: {
     })
   }
 
+  const mcpWarnings = input.mcp
+    ? await validateWorkflowWithMcp({
+        mcp: input.mcp,
+        workflow: compiled.workflow,
+      })
+    : []
+  const mcpValidationStatus: V2McpValidationStatus = input.mcp
+    ? mcpWarnings.length > 0
+      ? "warning"
+      : "passed"
+    : "not_configured"
+
   const preview = await input.previewStore.save({
     planId: version.planId,
     planVersion: version.planVersion,
     workflow: compiled.workflow,
     mappingTrace: compiled.mappingTrace,
     validationStatus: simulation.status,
-    warnings: [...compiled.warnings, ...workflowValidation.warnings.map(toV2Warning)],
+    mcpValidationStatus,
+    warnings: [...compiled.warnings, ...workflowValidation.warnings.map(toV2Warning), ...mcpWarnings.map(toV2Warning)],
     createdAt: checkedAt,
   })
 
@@ -91,12 +109,13 @@ export async function compileV2Preview(input: {
     nodeCount: preview.workflow.nodes.length,
     workflowHash: preview.workflowHash,
     validationStatus: preview.validationStatus,
+    mcpValidationStatus: preview.mcpValidationStatus,
     mappingTrace: preview.mappingTrace,
     warnings: preview.warnings,
   }
 }
 
-function toV2Warning(issue: WorkflowIssue): V2Warning {
+function toV2Warning(issue: { code: string; message: string }): V2Warning {
   return {
     code: issue.code,
     message: issue.message,
