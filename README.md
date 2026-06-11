@@ -195,6 +195,7 @@ v1.0.0 是稳定契约 release candidate，不代表发布到 npm 或创建 Git 
 
 - 默认插件入口只注册 v2 工具，不再注册 `n8n_build_workflow`、`n8n_update_workflow`、`n8n_claim_workflow`、`n8n_check_workflow_readiness`、`n8n_inspect_workflow` 和 `n8n_list_managed_workflows`。
 - 新增隔离的 v2 artifact root：`.opencode/n8n-v2/`。
+- v2 plan、preview、registry 和 run artifact store 通过 `V2ArtifactStorage` adapter 访问持久化层，默认实现是 `V2FileArtifactStorage`。
 - 支持高级链路：`n8n_v2_create_plan` -> `n8n_v2_review_plan` -> `n8n_v2_patch_plan` -> `n8n_v2_validate_simulate` -> `n8n_v2_compile_preview` -> `n8n_v2_apply`。
 - 支持便利链路：`n8n_v2_auto_preview` 一次性完成 plan、review、validate/simulate 和 compile preview，不写 n8n。
 - `V2PreviewMappingTrace` 会记录 business intent、plan step、pattern、n8n node、node parameter paths、expressions、source fields 和 output fields，便于审查 compile 映射。

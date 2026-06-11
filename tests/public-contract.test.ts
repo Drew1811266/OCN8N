@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises"
 import { describe, expect, it } from "vitest"
 import type {
   N8nWorkflow,
+  V2ArtifactStorage,
   V2ArtifactPaths,
   V2ApplyArgs,
   V2ApplyResult,
@@ -54,6 +55,11 @@ describe("public package contract exports", () => {
 
   it("exports v2 public tool and artifact types", () => {
     const warning: Warning = { code: "V2_WARNING", message: "Review required." }
+    const storage: V2ArtifactStorage = {
+      readText: async () => undefined,
+      writeText: async () => undefined,
+      listNames: async () => [],
+    }
     const workflow: N8nWorkflow = {
       name: "Orders",
       active: false,
@@ -430,6 +436,7 @@ describe("public package contract exports", () => {
 
     expect({
       warning,
+      storage,
       workflow,
       v2Paths,
       createArgs,

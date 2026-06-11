@@ -1,6 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises"
-import path from "node:path"
 import { N8nBuilderError } from "../errors.js"
+import { V2FileArtifactStorage, type V2ArtifactStorage } from "./storage.js"
 import type { V2RegistryRecord } from "./types.js"
 
 type V2RegistryFile = {
@@ -8,7 +7,10 @@ type V2RegistryFile = {
 }
 
 export class V2WorkflowRegistry {
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly storage: V2ArtifactStorage = new V2FileArtifactStorage(),
+  ) {}
 
   async list(): Promise<V2RegistryRecord[]> {
     return (await this.read()).workflows
@@ -37,7 +39,8 @@ export class V2WorkflowRegistry {
 
   private async read(): Promise<V2RegistryFile> {
     try {
-      const raw = await readFile(this.filePath, "utf8")
+      const raw = await this.storage.readText(this.filePath)
+      if (raw === undefined) return { workflows: [] }
       const parsed: unknown = JSON.parse(raw)
 
       return isV2RegistryFile(parsed) ? { workflows: parsed.workflows } : { workflows: [] }
@@ -47,8 +50,7 @@ export class V2WorkflowRegistry {
   }
 
   private async write(file: V2RegistryFile): Promise<void> {
-    await mkdir(path.dirname(this.filePath), { recursive: true })
-    await writeFile(this.filePath, `${JSON.stringify(file, null, 2)}\n`, "utf8")
+    await this.storage.writeText(this.filePath, `${JSON.stringify(file, null, 2)}\n`)
   }
 }
 

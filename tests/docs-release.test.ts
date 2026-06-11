@@ -163,6 +163,8 @@ describe("release documentation", () => {
       "expressions",
       "sourceFields",
       "outputFields",
+      "V2ArtifactStorage",
+      "V2FileArtifactStorage",
     ]) {
       expect(publicContract).toContain(term)
     }

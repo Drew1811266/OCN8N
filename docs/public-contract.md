@@ -130,6 +130,8 @@ Runs a confirm-gated dry-run trial for a compiled preview.
 - `V2PreviewUpdateTarget`: update preview metadata with target workflow ID, current workflow hash, `hasChanges`, and structured `V2WorkflowDiff`.
 - `V2TrialRunArtifact`: immutable local dry-run artifact with simulation result, provenance, warnings, timing, and non-triggered execution metadata.
 - `V2ArtifactPaths`: isolated v2 artifact paths under `.opencode/n8n-v2/`.
+- `V2ArtifactStorage`: storage adapter interface used by v2 plan, preview, registry, and run stores.
+- `V2FileArtifactStorage`: default filesystem implementation of `V2ArtifactStorage`.
 
 ## Persisted Artifacts
 
@@ -143,6 +145,10 @@ v2 artifacts are isolated under `.opencode/n8n-v2/`:
 
 The v1 `.opencode/n8n-workflows.json` and `.opencode/n8n-update-previews/`
 locations are not read as v2 ownership.
+
+v2 stores use `V2ArtifactStorage` internally. The default plugin path uses
+`V2FileArtifactStorage`, while tests and future integrations can inject another
+adapter without changing the public tool contract.
 
 ## Error Contract
 

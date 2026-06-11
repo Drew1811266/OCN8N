@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { N8nBuilderError } from "../errors.js"
 import { stableHash } from "../hash.js"
 import { redactSecrets } from "../security.js"
+import { isStorageAlreadyExistsError, V2FileArtifactStorage, type V2ArtifactStorage } from "./storage.js"
 import type { V2Plan, V2PlanVersion } from "./types.js"
 
 export type SaveInitialV2PlanInput = {
@@ -20,7 +20,10 @@ export type SaveNextV2PlanInput = SaveInitialV2PlanInput & {
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export class V2PlanStore {
-  constructor(private readonly plansDir: string) {}
+  constructor(
+    private readonly plansDir: string,
+    private readonly storage: V2ArtifactStorage = new V2FileArtifactStorage(),
+  ) {}
 
   async saveInitial(input: SaveInitialV2PlanInput): Promise<V2PlanVersion> {
     const plan = sanitizePlan(input.plan)
@@ -88,7 +91,8 @@ export class V2PlanStore {
     }
 
     try {
-      const raw = await readFile(this.versionPath(planId, planVersion), "utf8")
+      const raw = await this.storage.readText(this.versionPath(planId, planVersion))
+      if (raw === undefined) return undefined
       const parsed: unknown = JSON.parse(raw)
 
       return isV2PlanVersion(parsed) &&
@@ -113,7 +117,7 @@ export class V2PlanStore {
     }
 
     try {
-      const entries = await readdir(path.join(this.plansDir, planId))
+      const entries = await this.storage.listNames(path.join(this.plansDir, planId))
       const versionNumbers = entries
         .map((entry) => /^v([1-9]\d*)\.json$/.exec(entry)?.[1])
         .filter((value): value is string => value !== undefined)
@@ -137,14 +141,10 @@ export class V2PlanStore {
     }
     const filePath = this.versionPath(version.planId, version.planVersion)
 
-    await mkdir(path.dirname(filePath), { recursive: true })
     try {
-      await writeFile(filePath, `${JSON.stringify(persistedVersion, null, 2)}\n`, {
-        encoding: "utf8",
-        flag: "wx",
-      })
+      await this.storage.writeText(filePath, `${JSON.stringify(persistedVersion, null, 2)}\n`, { exclusive: true })
     } catch (error) {
-      if (isNodeError(error) && error.code === "EEXIST") {
+      if (isStorageAlreadyExistsError(error)) {
         throw new N8nBuilderError("V2 plan version already exists.", "V2_PLAN_VERSION_EXISTS", {
           planId: version.planId,
           planVersion: version.planVersion,
@@ -169,10 +169,6 @@ function sanitizePlan(plan: V2Plan): V2Plan {
 function sanitizeSummary(summary: string): string {
   const redacted = redactSecrets(summary)
   return typeof redacted === "string" ? redacted : "[REDACTED]"
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error
 }
 
 function isSafePlanId(planId: string): boolean {

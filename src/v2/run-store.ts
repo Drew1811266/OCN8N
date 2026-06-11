@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { N8nBuilderError } from "../errors.js"
 import { redactSecrets } from "../security.js"
+import { isStorageAlreadyExistsError, V2FileArtifactStorage, type V2ArtifactStorage } from "./storage.js"
 import type { V2SimulationResult, V2ValidationIssue, V2Warning } from "./types.js"
 
 export type V2TrialRunMode = "dry_run"
@@ -36,6 +36,7 @@ export class V2RunStore {
   constructor(
     private readonly runsDir: string,
     private readonly createId: () => string = randomUUID,
+    private readonly storage: V2ArtifactStorage = new V2FileArtifactStorage(),
   ) {}
 
   async save(input: SaveV2TrialRunArtifactInput): Promise<V2TrialRunArtifact> {
@@ -46,11 +47,10 @@ export class V2RunStore {
     }
     const filePath = this.filePath(run.runId)
 
-    await mkdir(this.runsDir, { recursive: true })
     try {
-      await writeFile(filePath, `${JSON.stringify(run, null, 2)}\n`, { encoding: "utf8", flag: "wx" })
+      await this.storage.writeText(filePath, `${JSON.stringify(run, null, 2)}\n`, { exclusive: true })
     } catch (error) {
-      if (isNodeError(error) && error.code === "EEXIST") {
+      if (isStorageAlreadyExistsError(error)) {
         throw new N8nBuilderError("V2 trial run artifact already exists.", "V2_RUN_EXISTS", {
           runId: run.runId,
         })
@@ -68,7 +68,8 @@ export class V2RunStore {
     }
 
     try {
-      const raw = await readFile(this.filePath(runId), "utf8")
+      const raw = await this.storage.readText(this.filePath(runId))
+      if (raw === undefined) return undefined
       const parsed: unknown = JSON.parse(raw)
 
       return isV2TrialRunArtifact(parsed) && parsed.runId === runId ? parsed : undefined
@@ -84,10 +85,6 @@ export class V2RunStore {
 
 function isSafeRunId(runId: string): boolean {
   return uuidPattern.test(runId)
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error
 }
 
 function isV2TrialRunArtifact(value: unknown): value is V2TrialRunArtifact {

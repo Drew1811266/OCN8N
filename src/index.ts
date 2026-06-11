@@ -41,6 +41,8 @@ export type {
   V2ArtifactPaths,
   Warning,
 } from "./types.js"
+export { V2FileArtifactStorage } from "./v2/storage.js"
+export type { V2ArtifactStorage, V2WriteTextOptions } from "./v2/storage.js"
 export type {
   V2Confidence,
   V2CredentialRequirement,
