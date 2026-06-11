@@ -23,14 +23,16 @@ export class V2PlanStore {
   constructor(private readonly plansDir: string) {}
 
   async saveInitial(input: SaveInitialV2PlanInput): Promise<V2PlanVersion> {
+    const plan = sanitizePlan(input.plan)
+
     return this.writeVersion({
       planId: randomUUID(),
       planVersion: 1,
-      plan: sanitizePlan(input.plan),
+      plan,
       createdAt: input.createdAt,
       source: "create",
       summary: input.summary,
-      contentHash: stableHash(input.plan),
+      contentHash: stableHash(plan),
     })
   }
 
@@ -43,16 +45,25 @@ export class V2PlanStore {
     }
 
     const latest = await this.latest(input.planId)
-    const nextVersion = latest ? latest.planVersion + 1 : input.parentPlanVersion + 1
+    if (!latest || latest.planVersion !== input.parentPlanVersion) {
+      throw new N8nBuilderError("Invalid v2 plan parent version.", "V2_PLAN_INVALID", {
+        planId: input.planId,
+        parentPlanVersion: input.parentPlanVersion,
+        latestPlanVersion: latest?.planVersion,
+      })
+    }
+
+    const plan = sanitizePlan(input.plan)
+    const nextVersion = input.parentPlanVersion + 1
 
     return this.writeVersion({
       planId: input.planId,
       planVersion: nextVersion,
-      plan: sanitizePlan(input.plan),
+      plan,
       createdAt: input.createdAt,
       source: "patch",
       summary: input.summary,
-      contentHash: stableHash(input.plan),
+      contentHash: stableHash(plan),
       parentPlanVersion: input.parentPlanVersion,
     })
   }
@@ -66,7 +77,10 @@ export class V2PlanStore {
       const raw = await readFile(this.versionPath(planId, planVersion), "utf8")
       const parsed: unknown = JSON.parse(raw)
 
-      return isV2PlanVersion(parsed) && parsed.planId === planId && parsed.planVersion === planVersion
+      return isV2PlanVersion(parsed) &&
+        parsed.planId === planId &&
+        parsed.planVersion === planVersion &&
+        parsed.contentHash === stableHash(parsed.plan)
         ? parsed
         : undefined
     } catch {

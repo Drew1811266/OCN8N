@@ -137,8 +137,8 @@ describe("V2PlanStore", () => {
     expect(second.planId).toBe(first.planId)
     expect(second.planVersion).toBe(2)
     expect(second.parentPlanVersion).toBe(1)
-    expect(first.contentHash).toBe(stableHash(initialPlan))
-    expect(second.contentHash).toBe(stableHash(patchedPlan))
+    expect(first.contentHash).toBe(stableHash(first.plan))
+    expect(second.contentHash).toBe(stableHash(second.plan))
     expect(await store.get(first.planId, 1)).toEqual(first)
     expect(await store.get(first.planId, 2)).toEqual(second)
     expect(await store.latest(first.planId)).toEqual(second)
@@ -166,7 +166,7 @@ describe("V2PlanStore", () => {
       summary: "Plan with sensitive sample",
     })
 
-    expect(saved.contentHash).toBe(stableHash(sensitivePlan))
+    expect(saved.contentHash).toBe(stableHash(saved.plan))
     const raw = await readFile(path.join(plansDir(), saved.planId, "v1.json"), "utf8")
     expect(raw).not.toContain("secret-token")
     expect(raw).toContain("[REDACTED]")
@@ -201,6 +201,47 @@ describe("V2PlanStore", () => {
     expect(await pathExists(path.join(plansDir(), validId))).toBe(false)
   })
 
+  it("rejects missing and stale saveNext parent versions", async () => {
+    const store = new V2PlanStore(plansDir())
+    const missingPlanId = "123e4567-e89b-12d3-a456-426614174000"
+
+    await expect(
+      store.saveNext({
+        planId: missingPlanId,
+        parentPlanVersion: 100,
+        plan: plan(),
+        createdAt: "2026-06-11T00:05:00.000Z",
+        summary: "Missing parent",
+      }),
+    ).rejects.toMatchObject({ code: "V2_PLAN_INVALID" })
+    expect(await pathExists(path.join(plansDir(), missingPlanId, "v101.json"))).toBe(false)
+
+    const first = await store.saveInitial({
+      plan: plan(),
+      createdAt: "2026-06-11T00:00:00.000Z",
+      summary: "Initial webhook plan",
+    })
+    const second = await store.saveNext({
+      planId: first.planId,
+      parentPlanVersion: first.planVersion,
+      plan: plan({ trace: ["Patch v2."] }),
+      createdAt: "2026-06-11T00:05:00.000Z",
+      summary: "Patch v2",
+    })
+
+    await expect(
+      store.saveNext({
+        planId: first.planId,
+        parentPlanVersion: first.planVersion,
+        plan: plan({ trace: ["Stale patch."] }),
+        createdAt: "2026-06-11T00:10:00.000Z",
+        summary: "Stale patch",
+      }),
+    ).rejects.toMatchObject({ code: "V2_PLAN_INVALID" })
+    expect(await store.latest(first.planId)).toEqual(second)
+    expect(await pathExists(path.join(plansDir(), first.planId, "v3.json"))).toBe(false)
+  })
+
   it("returns undefined for traversal IDs, malformed versions, missing files, and malformed JSON", async () => {
     const store = new V2PlanStore(plansDir())
     expect(await store.get("../../outside", 1)).toBeUndefined()
@@ -232,6 +273,19 @@ describe("V2PlanStore", () => {
       `${JSON.stringify(planVersion({ planVersion: 2 }), null, 2)}\n`,
       "utf8",
     )
+    expect(await store.get(validId, 1)).toBeUndefined()
+  })
+
+  it("returns undefined when stored content hash does not match the persisted plan", async () => {
+    const store = new V2PlanStore(plansDir())
+    const validId = "123e4567-e89b-12d3-a456-426614174000"
+    await mkdir(path.join(plansDir(), validId), { recursive: true })
+    await writeFile(
+      path.join(plansDir(), validId, "v1.json"),
+      `${JSON.stringify(planVersion({ contentHash: "wrong-hash" }), null, 2)}\n`,
+      "utf8",
+    )
+
     expect(await store.get(validId, 1)).toBeUndefined()
   })
 
