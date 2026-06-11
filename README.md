@@ -1,34 +1,438 @@
 # opencode-n8n-builder
 
-`opencode-n8n-builder` 是一个用于连接 OpenCode 和 n8n 的插件。它的 2.0 默认入口使用 pattern-first 计划模型，把自然语言需求拆成可审查的业务 plan、验证/模拟结果、compiled preview 和显式确认后的 n8n 写入。
+[![Version](https://img.shields.io/badge/version-2.0.0-blue)](package.json)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-green)](package.json)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+[![OpenCode](https://img.shields.io/badge/OpenCode-plugin-black)](https://opencode.ai/)
+[![n8n](https://img.shields.io/badge/n8n-workflow-orange)](https://n8n.io/)
+
+`opencode-n8n-builder` 是一个 OpenCode 插件，用于把自然语言自动化需求转化为可审查、可验证、可模拟、可预览并可安全写入 n8n 的 workflow。
 
 当前版本：`2.0.0`
 
-当前状态：`v2.0` public contract reset。默认 OpenCode 工具面已经从 v1 build/update/inspect 工具切换为 `n8n_v2_*` 工具；v1 实现代码仍保留在仓库中用于 legacy 覆盖，但不再通过默认插件入口暴露。
+v2.0 使用 pattern-first planning：插件不会直接把一句需求粗暴转换成 n8n JSON，而是先生成业务 plan，再进行 review、validate、simulate、compile preview，最后只有在显式确认后才写入 n8n。
 
-## Breaking Reset
+## 目录
 
-v2.0 是破坏性重置：
+- [适用场景](#适用场景)
+- [核心能力](#核心能力)
+- [快速开始](#快速开始)
+- [工作流路径](#工作流路径)
+- [公开工具](#公开工具)
+- [技术架构](#技术架构)
+- [v2 Plan 模型](#v2-plan-模型)
+- [Artifact 与 Registry](#artifact-与-registry)
+- [安全模型](#安全模型)
+- [配置](#配置)
+- [TypeScript API](#typescript-api)
+- [兼容性与边界](#兼容性与边界)
+- [本地验证](#本地验证)
+- [文档索引](#文档索引)
 
-- v1 `.opencode/n8n-workflows.json` 不是 v2 registry。
-- v1 update preview 文件不会被 v2 读取或迁移。
-- v2 artifacts 只写入 `.opencode/n8n-v2/`。
+## 适用场景
+
+这个项目面向需要在 OpenCode 中设计和维护 n8n 自动化流程的团队或个人，尤其适合以下场景：
+
+- 用自然语言快速生成 n8n workflow 草案，但需要在写入前看到计划、风险、模拟结果和映射关系。
+- 把复杂自动化拆成 trigger、transform、branch、loop、external call、error handling 和 output 等可审查 pattern。
+- 对现有 n8n workflow 做显式 claim/import，然后反向生成业务 plan，继续通过 v2 工具迭代。
+- 在不触发真实 workflow、不调用外部 API 的前提下，进行 dry-run trial 和 field-flow 检查。
+- 需要保留本地审计 artifact，例如 plan version、compiled preview、run artifact 和 workflow registry。
+- 希望 n8n 写操作保持 conservative：默认 inactive、显式确认、active workflow 只读、防 stale update。
+
+## 核心能力
+
+- **Pattern-first planning**：把需求拆成业务 intent、inputs、entities、steps、patterns、branches、loops、external calls、error policy、outputs、test contract 和 credentials。
+- **双路径体验**：`n8n_v2_auto_preview` 提供一站式 preview；高级用户可以逐步运行 create、review、patch、validate/simulate、compile 和 apply。
+- **结构化 plan review**：解释每个 pattern 的选择原因、假设、风险、credential gap 和 simulation coverage。
+- **Validation 与 simulation**：检查必需结构、branch default、loop bounds、external response contract、credential requirement，并生成 sample path 和 field traces。
+- **Compiled preview**：把 plan 编译成 inactive n8n workflow preview，保存本地 artifact，不直接写 n8n。
+- **Mapping trace**：将 business intent、plan step、pattern、n8n node、node parameter paths、expressions、source fields 和 output fields 关联起来。
+- **可选 MCP validation**：配置 n8n MCP 后，compile preview 保存前会调用 `validate_workflow`；失败会阻止保存。
+- **安全 apply**：只有 `confirm: true` 才能写入 n8n；创建默认 inactive workflow；更新仅限 v2-claimed inactive workflow。
+- **Claim 与 reverse planning**：inactive workflow 可以 full claim；active workflow 只能 read-only claim；已 claim workflow 可反向生成 v2 plan。
+- **Dry-run trial**：`n8n_v2_run_trial` 只重跑本地 validation/simulation，不触发 n8n，不调用外部 API。
+- **隔离 artifact storage**：v2 数据写入 `.opencode/n8n-v2/`，并通过 `V2ArtifactStorage` adapter 抽象持久化层。
+
+## 快速开始
+
+### 1. 前置条件
+
+- Node.js 20 或更新版本。
+- OpenCode，并启用插件配置能力。
+- 可选但推荐：一个可访问的 n8n 实例和 n8n public API key。
+- 可选：n8n MCP endpoint，用于 compile preview 后的 `validate_workflow`。
+- 可选：Docker Desktop，仅在运行真实 n8n E2E 测试时需要。
+
+### 2. 安装
+
+如果该包已发布到 npm，可以从 npm 包安装：
+
+```bash
+npm install opencode-n8n-builder
+```
+
+如果从本仓库本地运行：
+
+```bash
+npm install
+npm run build
+```
+
+### 3. OpenCode 配置
+
+在 OpenCode config 中启用插件。只做本地 plan、review、simulate、compile preview 时，可以不配置 n8n API key；需要 `apply`、`claim_workflow` 或 `reverse_plan` 时，需要 REST API 配置。真实 key 推荐通过环境变量提供；示例中的 `${...}` 表示配置位置占位，是否展开取决于 OpenCode 配置层。
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-n8n-builder"],
+  "n8n": {
+    "baseUrl": "https://your-instance.app.n8n.cloud/api/v1",
+    "apiKey": "${N8N_API_KEY}",
+    "mcpUrl": "https://your-instance.app.n8n.cloud/mcp-server/http",
+    "mcpToken": "${N8N_MCP_TOKEN}"
+  }
+}
+```
+
+环境变量形式：
+
+```bash
+export N8N_BASE_URL="https://your-instance.app.n8n.cloud/api/v1"
+export N8N_API_KEY="your-public-api-key"
+export N8N_MCP_URL="https://your-instance.app.n8n.cloud/mcp-server/http"
+export N8N_MCP_TOKEN="optional-mcp-token"
+```
+
+更多配置示例见 `examples/`：
+
+- `examples/opencode.local-n8n.json`
+- `examples/opencode.n8n-cloud.json`
+- `examples/opencode.mcp-token.json`
+- `examples/opencode.credentials.json`
+
+### 4. 最小使用路径
+
+先生成一个本地 preview，不写 n8n：
+
+```text
+Use n8n_v2_auto_preview to create a webhook workflow that receives an order,
+maps the fields, branches by status, calls a fulfillment API, retries failures,
+sends a notification, and responds to the webhook.
+```
+
+确认 preview 后再显式 apply：
+
+```text
+Use n8n_v2_apply with previewId "<preview-id>" and confirm true.
+```
+
+## 工作流路径
+
+### Convenience Track
+
+适合快速得到可审查 preview：
+
+```text
+n8n_v2_auto_preview
+  -> create plan
+  -> review plan
+  -> validate/simulate
+  -> compile preview
+  -> stop before n8n writes
+```
+
+这个路径只写本地 v2 plan 和 preview artifact，不写 n8n。
+
+### Advanced Track
+
+适合复杂迭代、审计和调试：
+
+```text
+n8n_v2_create_plan
+  -> n8n_v2_review_plan
+  -> n8n_v2_patch_plan
+  -> n8n_v2_validate_simulate
+  -> n8n_v2_compile_preview
+  -> n8n_v2_apply
+```
+
+每次 patch 都会生成新的 immutable plan version；compile 和 apply 都引用精确的 `planId` 与 `planVersion`。
+
+### Existing Workflow Track
+
+适合把已有 n8n workflow 纳入 v2 管理：
+
+```text
+n8n_v2_claim_workflow
+  -> n8n_v2_reverse_plan
+  -> review / patch / validate / compile
+  -> n8n_v2_apply
+```
+
+inactive workflow 可以 full claim；active workflow 只能 read-only claim 和 reverse plan。active workflow structural apply 不属于 v2.0 能力。
+
+## 公开工具
+
+默认插件入口只暴露 `n8n_v2_*` 工具。v2 是 Breaking Reset：v1 build/update/inspect/readiness/list 工具不再通过默认入口注册，v1 artifact 也不会被静默迁移为 v2 ownership。
+
+| Tool | 用途 | 写操作 | 需要 n8n API |
+| --- | --- | --- | --- |
+| `n8n_v2_auto_preview` | 从自然语言生成 plan、review、simulation 和 compiled preview | 写本地 plan/previews | 否 |
+| `n8n_v2_create_plan` | 创建 v2 business workflow plan | 写本地 plans | 否 |
+| `n8n_v2_review_plan` | 审查指定 plan version | 无 | 否 |
+| `n8n_v2_patch_plan` | 基于已有 plan 保存新版本 | 写本地 plans | 否 |
+| `n8n_v2_validate_simulate` | 运行结构验证和 sample simulation | 无 | 否 |
+| `n8n_v2_compile_preview` | 编译 inactive workflow preview，可选生成 update diff | 写本地 previews | 仅 `workflowId` update preview 需要 |
+| `n8n_v2_apply` | 创建 inactive workflow，或更新 v2-claimed inactive workflow | 写 n8n 和 v2 registry | 是 |
+| `n8n_v2_claim_workflow` | 显式 claim/import 现有 workflow | preview 无写入；apply 写 registry，inactive full claim 可写 marker | 是 |
+| `n8n_v2_reverse_plan` | 从 v2-claimed workflow 反向生成 plan | 写本地 plans 和 registry metadata | 是 |
+| `n8n_v2_run_trial` | confirm-gated dry-run trial | 写本地 runs | 否 |
+
+## 技术架构
+
+```mermaid
+flowchart TD
+  User["OpenCode user"] --> Plugin["OpenCode plugin entrypoint"]
+  Plugin --> LocalTools["Local v2 tools"]
+  Plugin --> ApiTools["API-backed v2 tools"]
+
+  LocalTools --> Planner["Pattern-first planner"]
+  Planner --> PlanStore["V2PlanStore"]
+  PlanStore --> Storage["V2ArtifactStorage"]
+
+  Planner --> Review["Plan review"]
+  Review --> Simulation["Validation + simulation"]
+  Simulation --> Compiler["V2 workflow compiler"]
+  Compiler --> PreviewStore["V2PreviewStore"]
+  PreviewStore --> Storage
+
+  Compiler --> McpValidation["Optional n8n MCP validate_workflow"]
+  McpValidation --> PreviewStore
+
+  ApiTools --> N8nApi["n8n REST API client"]
+  ApiTools --> Registry["V2WorkflowRegistry"]
+  Registry --> Storage
+
+  PreviewStore --> Apply["Apply safety gate"]
+  Apply --> N8nApi
+  Apply --> Registry
+
+  PreviewStore --> Trial["Dry-run trial"]
+  Trial --> RunStore["V2RunStore"]
+  RunStore --> Storage
+```
+
+主要模块：
+
+| 模块 | 职责 |
+| --- | --- |
+| `src/plugin.ts` | OpenCode 插件入口，注册 v2 工具，按 local/API/MCP 场景装配依赖 |
+| `src/config.ts` | 读取 OpenCode config 和环境变量，解析 v2 artifact paths、API 和 MCP 配置 |
+| `src/v2/pattern-planner.ts` | 从自然语言生成 pattern-first business workflow plan |
+| `src/v2/pattern-catalog.ts` | 定义七类基础 pattern family 及 medium-depth variants |
+| `src/v2/plan-service.ts` | plan review、patch、validation 和 simulation |
+| `src/v2/workflow-compiler.ts` | 将 v2 plan 编译为 inactive n8n workflow preview，并生成 mapping trace |
+| `src/v2/preview-store.ts` | 保存 compiled preview、workflow hash、update target 和 MCP validation 状态 |
+| `src/v2/registry.ts` | 维护 v2 workflow ownership registry |
+| `src/v2/run-store.ts` | 保存 dry-run trial artifact |
+| `src/v2/storage.ts` | `V2ArtifactStorage` adapter 和默认 `V2FileArtifactStorage` |
+| `src/n8n-api-client.ts` | n8n REST API client |
+| `src/n8n-mcp-client.ts` | n8n MCP JSON-RPC client |
+| `src/security.ts` | secret redaction、私网 URL warning 和安全辅助逻辑 |
+
+## v2 Plan 模型
+
+v2 plan 是业务 workflow 模型，不是 n8n node graph。它用于让自动化设计先具备可解释性，再进入编译步骤。
+
+核心结构：
+
+- `intent`：业务目标、范围和非目标。
+- `inputs`：trigger mode、输入 schema 和 sample input。
+- `entities`：业务对象和字段定义。
+- `steps`：业务步骤，每个步骤引用一个或多个 pattern。
+- `patterns`：七类 pattern family 的实例、variant、confidence、risk 和 warnings。
+- `branches`：条件路径、默认路径和目标步骤。
+- `loops`：pagination、batch、per-item iteration 和边界。
+- `externalCalls`：服务调用、请求 contract、响应 contract 和 credential requirement。
+- `errorPolicy`：fail fast、retry、fallback、dead letter 和 notification。
+- `outputs`：webhook response、service write 或 notification contract。
+- `testContract`：示例输入、预期输出和 edge cases。
+- `credentialRequirements`：credential 类型、auth mode、setup status 和是否阻断 apply。
+- `trace`：prompt 到 plan 的关键决策摘要。
+
+支持的七类基础 pattern：
+
+| Pattern family | 常见 variants | 验证重点 |
+| --- | --- | --- |
+| `trigger` | webhook、schedule、manual、polling | input contract、trigger mode、polling cadence |
+| `transform` | field mapping、format conversion、filtering、aggregation | 字段可用性、输出类型、表达式引用 |
+| `branch` | if、switch、multi-condition、default branch | 条件字段、默认路径、样例覆盖 |
+| `loop_batch` | pagination、batch、per-item、rate limit boundary | 终止条件、批量大小、迭代边界 |
+| `error_handling` | retry、fallback、failure notification、dead letter | 最大重试次数、fallback path、错误不静默丢弃 |
+| `external_call` | HTTP/API call、auth、response parsing、mock/schema | 请求 contract、credential、响应 contract |
+| `output` | respond to webhook、write service、send notification | 输出 contract、side effect、生产影响 |
+
+## Artifact 与 Registry
+
+v2 artifacts 全部隔离在 `.opencode/n8n-v2/`：
+
+```text
+.opencode/n8n-v2/
+  plans/
+    <planId>/v1.json
+    <planId>/v2.json
+  previews/
+    <previewId>.json
+  registry/
+    workflows.json
+  runs/
+    <runId>.json
+  claims/
+  exports/
+```
+
+重要规则：
+
+- v2 不读取 v1 `.opencode/n8n-workflows.json` 作为 v2 registry。
+- v2 不读取 v1 `.opencode/n8n-update-previews/` 作为 v2 preview。
 - v2 ownership marker 是 `opencode-n8n-builder-v2`。
-- 旧 workflow 必须通过 `n8n_v2_claim_workflow` 显式 claim/import 后，才能进入 v2 registry。
-- active workflow 只能 read-only claim 和 reverse plan；v2.0 不做 active workflow structural apply。
+- plan version 是 immutable；patch 和 reverse planning 会产生新版本。
+- preview 是 immutable；apply 引用精确 `previewId`。
+- registry 记录 workflow ID、base URL、claim mode、active-at-claim、latest workflow hash、latest plan/preview metadata 和更新时间。
+- v2 storage 通过 `V2ArtifactStorage` adapter 访问持久化层，默认实现是 `V2FileArtifactStorage`。
 
-默认公开工具：
+## 安全模型
 
-- `n8n_v2_auto_preview`
-- `n8n_v2_create_plan`
-- `n8n_v2_review_plan`
-- `n8n_v2_patch_plan`
-- `n8n_v2_validate_simulate`
-- `n8n_v2_compile_preview`
-- `n8n_v2_apply`
-- `n8n_v2_claim_workflow`
-- `n8n_v2_reverse_plan`
-- `n8n_v2_run_trial`
+本项目的默认策略是先审查、后写入，并尽量让写操作显式、可追踪、可阻断。
+
+- **No silent n8n writes**：只有 `n8n_v2_apply` 和 `n8n_v2_claim_workflow` apply 模式会写 n8n，且需要 `confirm: true`。
+- **Inactive by default**：新建 workflow 默认 `active: false`。
+- **No active structural apply**：active workflow 可以 read-only claim 和 reverse plan，但不能被 v2.0 结构性更新。
+- **Stale hash protection**：更新 v2-claimed inactive workflow 前会重新读取当前 workflow，并要求 hash 匹配 registry。
+- **Base URL boundary**：registry 中的 n8n base URL 必须和当前配置匹配。
+- **Read-only claim boundary**：read-only claimed workflow 不能被 update apply。
+- **Credential gate**：阻断 apply 的 credential requirement 必须先解决。
+- **Secret redaction**：错误、artifact 和普通工具输出会尽量避免明文 secret。
+- **No execution trigger by default**：dry-run trial 不触发 n8n，不创建临时 workflow，不调用外部 API。
+- **Breaking Reset**：v1 artifacts 不会被静默迁移，旧 workflow 必须显式 `n8n_v2_claim_workflow`。
+
+## 配置
+
+v2 工具按配置需求分三类：
+
+| 场景 | 工具 | 必需配置 |
+| --- | --- | --- |
+| Local-only | `auto_preview`、`create_plan`、`review_plan`、`patch_plan`、`validate_simulate`、不带 `workflowId` 的 `compile_preview`、`run_trial` | 无 n8n API 要求 |
+| API-backed | `apply`、`claim_workflow`、`reverse_plan`、带 `workflowId` 的 update preview | `N8N_BASE_URL` 和 `N8N_API_KEY` |
+| Optional MCP validation | `auto_preview`、`compile_preview` | `N8N_MCP_URL`，可选 `N8N_MCP_TOKEN` |
+
+MCP validation 状态：
+
+- `not_configured`：没有配置 MCP endpoint。
+- `passed`：MCP `validate_workflow` 通过。
+- `warning`：MCP 返回 warning，warning 会进入 result 和 preview artifact。
+
+MCP validation failure 会抛出 typed error，并阻止 preview 保存。
+
+Credential mapping 示例：
+
+```json
+{
+  "n8n": {
+    "credentialEnv": {
+      "httpHeaderAuth": {
+        "name": "Fulfillment API",
+        "type": "httpHeaderAuth",
+        "authMode": "api_key",
+        "env": {
+          "name": "FULFILLMENT_HEADER_NAME",
+          "value": "FULFILLMENT_API_KEY"
+        }
+      }
+    }
+  }
+}
+```
+
+OAuth credential 建议使用 `authMode: "oauth2"`，插件会返回 handoff 信息，由用户在 n8n UI 完成授权。
+
+## TypeScript API
+
+包入口导出插件实例、工厂函数、错误类型、v2 tool args/results、artifact 类型、pattern catalog 和 n8n workflow 类型。
+
+```ts
+import {
+  N8nBuilderPlugin,
+  createN8nBuilderPlugin,
+  N8nBuilderError,
+  V2_PATTERN_CATALOG,
+  type V2AutoPreviewArgs,
+  type V2AutoPreviewResult,
+  type V2CompiledPreview,
+  type V2ArtifactStorage,
+} from "opencode-n8n-builder"
+```
+
+常见扩展点：
+
+- 使用 `createN8nBuilderPlugin({ version })` 在测试或封装中传入自定义版本号。
+- 使用导出的 public contract 类型为外部 wrapper、测试夹具或文档生成器提供类型约束。
+- 使用 `V2ArtifactStorage` 为未来 shared storage、database backend 或测试环境注入自定义持久化实现。
+
+## 兼容性与边界
+
+运行时要求：
+
+- Node.js `>=20`
+- OpenCode 插件运行环境
+- n8n REST API，用于 apply、claim 和 reverse plan
+- 可选 n8n MCP endpoint，用于 preview 保存前 validation
+
+v2.0 的兼容性声明以 pattern family 为中心，而不是承诺覆盖每一个官方或社区节点的所有参数组合。七类基础 pattern 均有 medium-depth 支持；复杂或高风险变体会通过 warnings、较低 confidence 或人工 review 体现。
+
+当前不作为 v2.0 承诺的能力：
+
+- 修改 active workflow 的结构。
+- 自动激活 workflow 或自动触发 workflow 执行。
+- 全自动 OAuth consent。
+- 完整 credential setup wizard。
+- 可视化 canvas diff。
+- exhaustive community node support。
+- 完整 n8n node execution simulator。
+- 自动采样 execution history。
+- 团队共享 artifact backend。
+
+更多细节见 `docs/compatibility.md` 和 `docs/pattern-compatibility-matrix.md`。
+
+## 本地验证
+
+默认验证不启动 Docker，也不需要真实 n8n：
+
+```bash
+npm run typecheck
+npm run test
+npm run build
+npm run package:check
+```
+
+如果当前 shell 没有 `npm`，但依赖已安装，可以直接运行本地二进制：
+
+```bash
+./node_modules/.bin/tsc --noEmit
+./node_modules/.bin/vitest run
+./node_modules/.bin/tsup
+node scripts/check-package-files.mjs
+```
+
+真实 n8n E2E 是显式 opt-in：
+
+```bash
+N8N_E2E_API_KEY=<your-test-key> npm run test:e2e
+```
+
+E2E 会使用 Docker 启动测试 n8n，并覆盖 v2 complex auto preview、dry-run trial 和 inactive apply path。
 
 ## 文档索引
 
@@ -45,860 +449,6 @@ v2.0 是破坏性重置：
 - [Pattern Compatibility Matrix](docs/pattern-compatibility-matrix.md)
 - [CHANGELOG](CHANGELOG.md)
 
-## 项目目标
-
-这个项目的目标是让用户可以在 OpenCode 中用自然语言描述自动化流程，例如：
-
-- “当收到 webhook 后，把订单信息整理后发送到 Slack。”
-- “每天早上拉取某个接口的数据，过滤异常记录，然后发邮件提醒。”
-- “给已有的托管 workflow 增加一个错误通知步骤。”
-
-插件会负责：
-
-1. 读取 n8n 官方 MCP 提供的 SDK 指南和节点文档。
-2. 让 OpenCode 生成结构化 workflow 计划。
-3. 将计划编译成 n8n workflow JSON。
-4. 校验 workflow 的安全性和结构合法性。
-5. 通过 n8n REST API 创建或更新 workflow。
-6. 在本地 registry 中记录哪些 workflow 是由本插件托管的。
-
-第一版重点不是“接管所有 n8n workflow”，而是建立一个安全、可控、可多轮对话迭代的托管 workflow 工作流。
-
-## 为什么要这样设计
-
-n8n 的节点生态很大，而且节点参数、凭据类型、版本和最佳实践会不断变化。如果在插件里硬编码所有节点配置，维护成本会很高，也很容易过时。
-
-因此本项目采用动态检索的方式：
-
-- 通过 n8n MCP 获取 SDK 指南。
-- 通过 n8n MCP 搜索节点。
-- 通过 n8n MCP 获取节点类型和配置文档。
-- 让 OpenCode 根据当前文档生成 workflow 计划。
-- 插件根据实际编译出的 workflow 生成用于 n8n MCP `validate_workflow` 的 SDK code。
-- 插件负责校验、编译、MCP validation、持久化和安全边界。
-
-这样可以让插件随着 n8n 节点文档更新而更容易适配新节点。
-
-## v0.1.0 已实现能力
-
-- 根据自然语言 prompt 创建 inactive 的 n8n workflow 草稿。
-- 使用 n8n MCP 动态检索 SDK 指南和节点文档。
-- 将 OpenCode 生成的计划编译成 n8n workflow JSON。
-- 在保存和更新前校验 workflow 结构。
-- 在本地 `.opencode/n8n-workflows.json` 中记录托管 workflow。
-- 只 inspect 本插件托管、inactive、且属于当前 n8n base URL 的 workflow。
-- 只 update 本插件托管、inactive、且属于当前 n8n base URL 的 workflow。
-- 使用 `preview` / `apply` 两阶段更新流程。
-- 在 apply 前检查 workflow 是否已被 n8n UI 或其他方式修改，避免过期 preview 覆盖新改动。
-- 从本地环境变量解析或创建 n8n credential 引用。
-- 避免把明文密钥写入 workflow JSON、preview 文件、registry 文件、日志或普通工具输出。
-- 支持列出当前 OpenCode workspace 中本地 registry 记录的托管 workflow。
-
-## v0.2.0 新增能力
-
-- 增加 opt-in 的真实 n8n Docker E2E 验证；默认 `npm test` 仍只跑本地单元测试，不启动 Docker。
-- 拆分普通 Vitest 配置和 E2E Vitest 配置，避免真实 n8n 测试混入默认测试。
-- 增加 `docker-compose.e2e.yml` 和 `scripts/run-e2e.mjs`，由 runner 负责启动 n8n、等待就绪、映射测试环境变量和清理容器。
-- 支持 MCP Bearer auth token：配置项 `n8n.mcpToken` 或环境变量 `N8N_MCP_TOKEN`。
-- E2E 中通过真实 n8n REST API 创建、读取、更新并清理测试 workflow。
-- 覆盖 lifecycle E2E 和 plugin smoke E2E，验证核心工具编排能连接真实 API/MCP 配置。
-
-## v0.3.0 新增能力
-
-- 使用 n8n MCP `get_suggested_nodes` 为 planner 提供节点选择建议。
-- planner 输出 workflow draft 和 nodeSelection 理由，插件根据实际编译出的 workflow 生成用于 MCP `validate_workflow` 的 SDK code。
-- build 和 update preview 在保存前调用 MCP `validate_workflow`。
-- MCP validation error 会阻止创建 workflow 或保存 update preview。
-- MCP validation warning 会进入工具结果的 `warnings`，便于用户继续调整 workflow。
-- E2E 覆盖扩展到 `get_suggested_nodes`、`validate_workflow` 和 draft planner 路径。
-
-v0.3 仍然使用现有 n8n REST API 创建和更新托管 workflow，不切换到 MCP `create_workflow_from_code` 或 MCP `update_workflow`。这样可以继续保留本地 registry、preview/apply、防 stale preview、inactive-only 等安全边界。
-
-## v0.4.0 新增能力
-
-- 增加节点兼容性 catalog，把节点支持声明拆分为 `tier_1_verified`、`tier_2_modeled` 和 `tier_3_dynamic`。
-- planner prompt 会收到 node compatibility guidance，优先使用已验证节点，同时仍允许 MCP 动态发现的节点。
-- build 和 update preview 会在工具结果中返回 `NODE_COMPATIBILITY_DYNAMIC` warning，提示某个节点来自动态发现但尚无提交的兼容性场景。
-- 默认测试新增 `tests/node-compatibility.test.ts`，覆盖兼容性 catalog、planner guidance 和动态节点 warning。
-- E2E fixture 扩展到 webhook transform response、schedule/http/if/set、webhook branch merge、API polling notice 等低风险场景。
-- README 新增兼容性 tiers 表，明确区分“已测试验证”和“通过 MCP 动态支持但未场景验证”。
-
-v0.4 仍不承诺每个官方节点和每种参数组合都已被真实 n8n E2E 验证。它的支持模型是：官方节点通过 MCP 动态检索和生成，仓库内只对明确列入兼容性矩阵的节点族和场景做测试背书。
-
-## v0.5.0 新增能力
-
-- build 和 update preview 结果新增 `credentialActions` 字段，和旧的 `missingCredentials` 并存，便于 OpenCode 给用户解释下一步操作。
-- credential resolver 会返回结构化 action：`reuse_existing`、`create_from_env`、`set_missing_env`、`configure_mapping`、`complete_oauth_in_n8n`。
-- `n8n.credentialEnv` 支持可选元数据：`authMode`、`setupUrl`、`docs`。
-- OAuth credential 使用 `authMode: "oauth2"` 时不会尝试通过 API 创建 credential，而是返回到 n8n UI 手动完成授权的操作指引。
-- 缺失环境变量时，工具结果只返回环境变量名，不返回环境变量值。
-- n8n API 和 MCP 错误详情会经过递归 redaction，避免嵌套 `token`、`clientSecret`、Bearer token、Slack token 等值出现在普通工具输出中。
-
-v0.5 仍不自动完成 OAuth consent，不存储 credential secret，也不修改非本插件创建和登记的 workflow。
-
-## v0.6.0 新增能力
-
-- 新增 `n8n_claim_workflow` 工具，用于显式接管已有 inactive n8n workflow。
-- `preview` 模式只读取 workflow，返回 eligibility、风险和结构摘要，不写 n8n，也不写本地 registry。
-- `apply` 模式要求 `confirm: true`，并会重新读取 workflow、重新校验资格，然后写入 `opencode-n8n-builder` marker 和本地 registry。
-- 已经带有本插件 marker 但本地 registry 缺失的 workflow，可以通过 claim apply 修复 registry。
-- active workflow、其他工具管理的 workflow、base URL 不匹配的 registry 记录、包含疑似明文密钥的 workflow 都会被阻断。
-- 成功 claim 后，既有 `n8n_inspect_workflow` 和 `n8n_update_workflow` 安全边界继续适用。
-
-v0.6 仍不接管 active workflow，不自动修复不安全节点，不导入执行历史，也不放宽 update preview/apply 的 stale 检查。
-
-## v0.7.0 新增能力
-
-- `n8n_update_workflow` 的 preview/apply 结果新增结构化 `diff`，覆盖新增/移除节点、参数变化、credential 名称变化、连接变化和 settings 变化。
-- update preview 文件会同时保存 `baseWorkflow`、`proposedWorkflow` 和脱敏后的 `diff`，为后续 rollback 提供可审计依据。
-- 新增 `rollback-preview` 模式：只读取 preview 和当前 workflow，返回从当前 proposed workflow 恢复到 base workflow 的差异，不写入 n8n。
-- 新增 `rollback-apply` 模式：仅当当前 n8n workflow 仍匹配当时的 proposed workflow hash 时，才恢复到 preview 前的 base workflow，并更新本地 registry。
-- update patch planner prompt 现在明确要求保留未改变的 node name、id、credential 和 connection，并优先生成满足需求的最小完整替换 workflow。
-- diff 输出会对敏感字段名和 Bearer/Slack token 风格字符串做 redaction，避免 preview 文件或工具结果暴露 secret。
-
-v0.7 仍不提供可视化 canvas diff，不浏览任意历史版本，不对未托管或未 claim 的 workflow 执行 rollback，也不放宽 inactive-only 安全边界。
-
-## v0.8.0 新增能力
-
-- 新增 `n8n_check_workflow_readiness` 工具，用于检查托管 workflow 是否具备上线前的基本条件。
-- `preview` 模式只读：检查托管 marker、本地 registry ownership、结构校验、明文密钥阻断、节点兼容性 warning、webhook/schedule 激活影响和 MCP validation 状态。
-- readiness 结果会尽量读取最近 5 条 execution summary；如果 n8n API endpoint 不可用或 API key 缺少 execution scope，会返回结构化 `diagnostics.supported: false`，不影响其他 readiness 检查。
-- `activate` 模式要求 `confirm: true`；有 blocking check 时拒绝激活，有 warning 时必须显式设置 `allowWarnings: true` 才能继续。
-- `deactivate` 模式要求 `confirm: true`，用于关闭当前 OpenCode workspace 已托管的 workflow。
-- 成功激活或停用后会刷新本地 registry 的 workflow 名称、URL、插件版本、更新时间和 hash。
-- n8n API client 新增 public API wrapper：`activateWorkflow`、`deactivateWorkflow` 和 `listExecutions`。
-
-v0.8 仍不允许 `n8n_update_workflow` 修改 active workflow，不自动触发 workflow run，不自动修复 readiness warning，也不把未托管 workflow 纳入激活/停用范围。
-
-## v0.9.0 新增能力
-
-- 补齐面向新技术用户的文档：安装、配置、credential setup、运营工具说明、排障和 release checklist。
-- 新增 `examples/`，提供 local n8n、n8n Cloud、MCP token 和 credential env mapping 的 parseable OpenCode config 示例。
-- 新增 `CHANGELOG.md`，记录 v0.1.0 到 v0.9.0 的版本变化。
-- package metadata 增加 repository、bugs、homepage、Node engine、扩展 package files 和 `package:check`。
-- 新增 Node-only package boundary check，用于确认 build 后 package 必需文件和 export entrypoint 存在。
-- 为 v0.9 release readiness 增加 docs/package metadata 测试，为后续 CI 和 v1.0 release candidate 打基础。
-
-v0.9 仍不发布 npm 包、不创建 release tag、不改变 runtime tool contract，也不新增 active workflow 结构编辑能力。
-
-## v1.0.0 新增能力
-
-- 从 package entrypoint 导出公开 TypeScript 契约类型，覆盖工具 args/results、registry、preview、workflow、diff、warning 和 credential action。
-- 新增 `docs/public-contract.md`，明确工具、结果、错误码、warning、registry、preview 和稳定性策略。
-- 新增 `docs/compatibility.md`，说明 Node、OpenCode、n8n、MCP、节点兼容性 tier 和 credential flow 支持边界。
-- 新增 `docs/security-review.md`，记录 v1.0 release candidate 的安全审查结论和 residual risks。
-- README、CHANGELOG、release checklist 和 package metadata 更新到 `1.0.0`。
-
-v1.0.0 是稳定契约 release candidate，不代表发布到 npm 或创建 Git tag；tag、GitHub release 和 npm publish 仍需要项目 owner 明确批准。
-
-## v2.0.0 新增能力
-
-- 默认插件入口只注册 v2 工具，不再注册 `n8n_build_workflow`、`n8n_update_workflow`、`n8n_claim_workflow`、`n8n_check_workflow_readiness`、`n8n_inspect_workflow` 和 `n8n_list_managed_workflows`。
-- 新增隔离的 v2 artifact root：`.opencode/n8n-v2/`。
-- v2 plan、preview、registry 和 run artifact store 通过 `V2ArtifactStorage` adapter 访问持久化层，默认实现是 `V2FileArtifactStorage`。
-- 支持高级链路：`n8n_v2_create_plan` -> `n8n_v2_review_plan` -> `n8n_v2_patch_plan` -> `n8n_v2_validate_simulate` -> `n8n_v2_compile_preview` -> `n8n_v2_apply`。
-- 支持便利链路：`n8n_v2_auto_preview` 一次性完成 plan、review、validate/simulate 和 compile preview，不写 n8n。
-- `V2PreviewMappingTrace` 会记录 business intent、plan step、pattern、n8n node、node parameter paths、expressions、source fields 和 output fields，便于审查 compile 映射。
-- 支持可选 MCP `validate_workflow`：配置 `N8N_MCP_URL` 或 `n8n.mcpUrl` 后，compile preview 保存前会返回并持久化 `mcpValidationStatus`，warning 会并入 `warnings`，validation failure 会阻止保存。
-- 支持 update preview diff：`n8n_v2_compile_preview` 可传入 `workflowId`，读取 v2-claimed inactive workflow 并在 `updateTarget.diff` 中返回结构化差异。
-- 支持 inactive workflow full claim，以及 active workflow read-only claim。
-- 支持 `n8n_v2_apply` 创建新的 inactive workflow，或在提供 `workflowId` 时更新 v2-claimed inactive workflow；更新前会重新读取当前 workflow、阻断 active/read-only/stale/base URL mismatch 场景。
-- 支持 `n8n_v2_reverse_plan` 从 v2-claimed workflow 生成 `source: "reverse"` 的 plan artifact，并报告 unmapped nodes、inferred external contracts 和 credential uncertainty。
-- 支持 `n8n_v2_run_trial` 对 compiled preview 执行 confirm-gated dry-run trial：只重新运行本地 validation/simulation，写入 `.opencode/n8n-v2/runs/`，不触发 n8n 或外部 API。
-- v2 ownership、registry、preview 和 plan artifact 均与 v1 分离；不会 silent migration。
-
-## 当前暂不支持
-
-- 修改 active workflow 的结构，或接管 active workflow。
-- 自动把 workflow 放入 n8n project 或 folder。
-- 自动完成 OAuth 授权流程。
-- 可视化 workflow diff。
-- 创建或更新后自动激活 workflow；激活必须通过 readiness 工具显式确认。
-- 直接触发 workflow 执行。
-- 保证支持所有第三方或社区节点。
-- 导入 workflow 执行历史。
-
-## 节点兼容性声明（v0.4+）
-
-v0.4 开始，项目使用分层兼容性声明。插件仍会通过 n8n MCP 动态检索官方节点文档，但 README 只对已经进入测试场景的节点族做明确验证声明。
-
-| Tier | 含义 | 示例 | 测试证据 |
-| --- | --- | --- | --- |
-| `tier_1_verified` | 已有提交的低风险场景和默认单元测试覆盖；Docker 可用时可跑真实 n8n E2E。 | Manual Trigger, Webhook, Schedule Trigger, Set/Edit Fields, IF, Switch, Merge, HTTP Request, Respond to Webhook | `tests/node-compatibility.test.ts`, `tests/e2e/helpers/test-workflows.test.ts`, opt-in Docker E2E |
-| `tier_2_modeled` | 已知节点族，可通过 MCP 文档动态生成，通常涉及凭据或 OAuth；v0.4 不做真实第三方服务 E2E。 | Slack, Gmail, Google Sheets, Code | unit fixtures and MCP docs context |
-| `tier_3_dynamic` | 运行时由 MCP 搜索/文档发现，但仓库中没有提交的兼容性场景。 | 其他官方节点或社区节点 | 工具结果返回 `NODE_COMPATIBILITY_DYNAMIC` warning |
-
-## 整体架构
-
-```mermaid
-flowchart TD
-  User["用户在 OpenCode 中输入自然语言需求"] --> Plugin["OpenCode 插件工具"]
-  Plugin --> MCP["n8n MCP Client"]
-  Plugin --> Planner["OpenCode Planner"]
-  MCP --> NodeDocs["SDK 指南和节点文档"]
-  NodeDocs --> Planner
-  Planner --> Plan["结构化 workflow 计划"]
-  Plan --> Compiler["Workflow Compiler"]
-  Compiler --> Validator["Workflow Validator"]
-  Validator --> API["n8n REST API Client"]
-  API --> N8N["n8n workflow 草稿"]
-  API --> Credentials["n8n credentials"]
-  Plugin --> Registry["本地 workflow registry"]
-  Plugin --> PreviewStore["本地 update preview store"]
-```
-
-主要模块：
-
-- `src/plugin.ts`：OpenCode 插件入口，负责注册工具和依赖装配。
-- `src/opencode-planner.ts`：调用 OpenCode 生成 workflow 计划，并解析结构化 JSON。
-- `src/n8n-mcp-client.ts`：n8n MCP JSON-RPC 客户端，用于读取 SDK 指南、搜索节点和获取节点文档。
-- `src/n8n-api-client.ts`：n8n REST API 客户端，用于 workflow 和 credential 持久化。
-- `src/workflow-compiler.ts`：把内部 workflow plan 编译为 n8n workflow JSON。
-- `src/validator.ts`：校验 workflow 结构、托管标记、连接关系、active 状态和疑似明文密钥。
-- `src/credential-resolver.ts`：根据配置和环境变量复用或创建 n8n credential。
-- `src/credential-actions.ts`：生成 credential setup action，用于解释复用、创建、缺失环境变量、缺失映射和 OAuth handoff。
-- `src/security.ts`：明文密钥检测、私网 URL warning 和递归 secret redaction。
-- `src/registry.ts`：管理本地托管 workflow registry。
-- `src/preview-store.ts`：保存短期 update preview。
-- `src/tools/*`：分别实现 build、update、claim、readiness、inspect、list 工具编排。
-
-## OpenCode 工具
-
-### `n8n_build_workflow`
-
-根据自然语言创建新的 inactive n8n workflow 草稿。
-
-参数：
-
-- `prompt`：必填，自然语言 workflow 需求。
-- `name`：可选，workflow 名称覆盖。
-
-执行流程：
-
-1. 读取 n8n SDK 指南。
-2. 根据 prompt 搜索相关 n8n 节点。
-3. 根据 prompt 获取 MCP suggested-node guidance。
-4. 获取节点类型和配置文档。
-5. 让 OpenCode 生成 workflow draft：包含 workflow plan 和节点选择理由。
-6. 编译为 n8n workflow JSON。
-7. 强制设置 `active: false`。
-8. 写入 `opencode-n8n-builder` 托管标记。
-9. 执行本地 workflow 校验。
-10. 解析 credential 引用，并生成 `credentialActions`。
-11. 根据实际编译出的 workflow 生成 SDK code，并使用 n8n MCP `validate_workflow` 校验。
-12. 调用 n8n REST API 创建 workflow。
-13. 写入本地 registry。
-
-### `n8n_update_workflow`
-
-预览或应用对托管 workflow 的更新。
-
-参数：
-
-- `workflowId`：必填，n8n workflow ID。
-- `mode`：必填，`preview`、`apply`、`rollback-preview` 或 `rollback-apply`。
-- `prompt`：`preview` 模式必填，描述希望如何修改 workflow。
-- `previewId`：`apply`、`rollback-preview` 和 `rollback-apply` 模式必填，由上一次 preview 返回。
-
-`preview` 行为：
-
-- 读取当前 workflow。
-- 检查 workflow 是否为 inactive 的托管 workflow。
-- 检查本地 registry 中是否存在同 base URL 的记录。
-- 根据用户 prompt 生成替换方案。
-- 编译和校验新 workflow。
-- 解析 credential，并生成 `credentialActions`。
-- 根据 replacement workflow 生成 SDK code，并使用 n8n MCP `validate_workflow` 校验。
-- 保存短期 preview。
-- 返回变更摘要和结构化 `diff`，不修改 n8n。
-
-`apply` 行为：
-
-- 读取 preview。
-- 重新读取当前 workflow。
-- 检查当前 workflow hash 是否仍然匹配 preview 生成时的 base hash。
-- 再次校验 proposed workflow。
-- 调用 n8n API 更新 workflow。
-- 更新本地 registry。
-- 返回保存的 preview `diff`。
-
-`rollback-preview` 行为：
-
-- 读取 preview。
-- 重新读取当前 workflow。
-- 检查当前 workflow 是否仍然匹配 preview 中的 proposed workflow hash。
-- 校验当前 workflow 和 rollback 目标 workflow。
-- 返回从当前 workflow 恢复到 base workflow 的结构化 `diff`，不修改 n8n。
-
-`rollback-apply` 行为：
-
-- 读取 preview。
-- 重新读取当前 workflow。
-- 检查当前 workflow 是否仍然匹配 preview 中的 proposed workflow hash。
-- 校验 rollback 目标 workflow。
-- 调用 n8n API 把 workflow 恢复到 preview 前的 base workflow。
-- 更新本地 registry，并返回 rollback `diff`。
-
-### `n8n_claim_workflow`
-
-显式接管已有 inactive n8n workflow，使其进入当前 OpenCode workspace 的托管生命周期。
-
-参数：
-
-- `workflowId`：必填，n8n workflow ID。
-- `mode`：必填，`preview` 或 `apply`。
-- `confirm`：`apply` 模式必须为 `true`。
-
-`preview` 行为：
-
-- 读取目标 workflow。
-- 校验 workflow 是否为 inactive。
-- 检查是否已有其他不兼容 ownership marker。
-- 检查本地 registry 是否已有同 workflow ID 且属于其他 n8n base URL 的记录。
-- 执行结构校验、疑似明文密钥检查和私网 URL warning。
-- 返回 claim eligibility、风险列表、节点数量、连接数量、触发节点类型和 credential 类型。
-- 不调用 n8n update API。
-- 不写本地 registry。
-
-`apply` 行为：
-
-- 要求 `confirm: true`。
-- 重新读取 workflow 并重新执行 `preview` 的 eligibility 检查。
-- 对未托管且符合条件的 inactive workflow 写入 `opencode-n8n-builder` marker/tag。
-- 对已带有本插件 marker 但本地 registry 缺失的 workflow，只修复本地 registry，不重复写 marker。
-- 写入本地 registry 后，既有 inspect 和 update preview/apply 流程即可继续使用。
-
-安全限制：
-
-- 不接管 active workflow。
-- 不接管带有其他 `meta.managedBy` 标记的 workflow。
-- 不接管包含疑似明文密钥参数的 workflow。
-- 不跨 n8n base URL 修复 registry 记录。
-
-### `n8n_check_workflow_readiness`
-
-检查当前 OpenCode workspace 托管 workflow 的上线准备情况，并在显式确认后激活或停用 workflow。
-
-参数：
-
-- `workflowId`：必填，n8n workflow ID。
-- `mode`：必填，`preview`、`activate` 或 `deactivate`。
-- `confirm`：`activate` 和 `deactivate` 模式必须为 `true`。
-- `allowWarnings`：仅 `activate` 模式使用。readiness 存在 warning 时，必须显式设置为 `true` 才允许激活。
-
-`preview` 行为：
-
-- 读取目标 workflow。
-- 检查 workflow 是否带有 `opencode-n8n-builder` 托管 marker。
-- 检查本地 registry 中是否存在同 workflow ID 且属于当前 n8n base URL 的记录。
-- 执行结构校验、疑似明文密钥阻断和私网 URL warning。
-- 返回节点兼容性 warning。
-- 返回 webhook 和 schedule trigger 在 inactive/active 状态下的上线影响。
-- 如果配置了 MCP validation，则用脱敏后的 workflow 生成 validation code 并返回校验结果。
-- 尝试读取最近 5 条 execution summary；如果 API endpoint 或 key scope 不支持，会返回 `diagnostics.supported: false`。
-- 不修改 n8n，也不写本地 registry。
-
-`activate` 行为：
-
-- 要求 `confirm: true`。
-- 重新执行 readiness preview 的全部检查。
-- 如果存在 blocking check，则拒绝激活。
-- 如果存在 warning 且未设置 `allowWarnings: true`，则拒绝激活。
-- 调用 n8n public API 激活 workflow。
-- 刷新本地 registry。
-
-`deactivate` 行为：
-
-- 要求 `confirm: true`。
-- 检查 workflow 必须是当前 workspace 记录的托管 workflow。
-- 调用 n8n public API 停用 workflow。
-- 刷新本地 registry。
-
-不可用时的 fallback：
-
-- 如果 execution listing API 不可用，readiness 会返回 `diagnostics.supported: false`，用户仍可在 n8n UI 中查看 execution history。
-- 如果 activation/deactivation API 或 API key scope 不可用，插件不会绕过 n8n public API；用户需要在 n8n UI 中手动激活或停用 workflow，之后可再次运行 `preview` 确认状态。
-
-生产检查清单：
-
-- workflow 有本插件托管 marker 或 tag。
-- 本地 registry ownership 属于当前 `N8N_BASE_URL`。
-- workflow 不包含疑似明文 secret。
-- MCP validation 通过或返回可解释 warning。
-- credential setup action 和缺失环境变量已经处理。
-- webhook/schedule trigger 的 activation 影响已确认。
-- 最近 execution summary 可读取，或已确认当前 API key scope 不支持读取 execution。
-
-### `n8n_inspect_workflow`
-
-查看托管 workflow 的摘要信息。
-
-参数：
-
-- `workflowId`：必填，n8n workflow ID。
-
-返回内容包括：
-
-- workflow ID。
-- workflow 名称。
-- active 状态。
-- 节点名称和类型。
-- 节点 credential 类型。
-- 连接信息。
-- 校验问题。
-
-安全限制：
-
-- 只允许 inspect inactive workflow。
-- workflow 必须带有 `opencode-n8n-builder` 托管标记。
-- 本地 registry 必须存在对应 workflow ID。
-- registry 记录的 base URL 必须和当前配置一致。
-
-### `n8n_list_managed_workflows`
-
-列出当前 OpenCode workspace 中本地 registry 记录的托管 workflow。
-
-参数：无。
-
-特点：
-
-- 只读取本地 `.opencode/n8n-workflows.json`。
-- 不需要 n8n API key。
-- 不需要 n8n MCP URL。
-- 适合快速查看当前项目由插件管理了哪些 workflow。
-
-## 安全模型
-
-当前安全模型是保守的。
-
-插件不会 update 或 inspect 一个 workflow，除非同时满足：
-
-- n8n workflow 中有 `opencode-n8n-builder` 托管 marker 或 tag。
-- workflow 当前为 inactive。
-- 本地 OpenCode workspace registry 中存在该 workflow ID。
-- registry 记录属于当前配置的 `N8N_BASE_URL`。
-
-update 还额外要求：
-
-- 必须先生成 preview。
-- apply 时必须提供 previewId。
-- preview 未过期。
-- preview 中 proposed workflow hash 未被篡改。
-- 当前 n8n workflow hash 仍然等于生成 preview 时的 base hash。
-
-claim 采用更窄的显式接管流程：
-
-- `preview` 只读，不写 n8n，也不写本地 registry。
-- `apply` 必须设置 `confirm: true`。
-- `apply` 会重新读取 workflow 并重新校验 eligibility。
-- 只有 inactive、结构有效、没有疑似明文密钥、没有不兼容 marker、没有 registry base URL 冲突的 workflow 才能被接管。
-
-readiness/activation 采用独立的显式生产门禁：
-
-- `preview` 只读，不修改 n8n。
-- `activate` 和 `deactivate` 必须设置 `confirm: true`。
-- `activate` 会先执行 readiness checks；blocking check 必须清除，warning 必须由 `allowWarnings: true` 显式放行。
-- `deactivate` 只允许当前 workspace registry 中同 base URL 的托管 workflow。
-- 激活或停用成功后只刷新 registry 记录，不放宽 `n8n_update_workflow` 的 inactive-only 结构编辑限制。
-
-这些限制用于避免：
-
-- 意外修改用户手工创建的 workflow。
-- 覆盖用户在 n8n UI 中直接做出的新修改。
-- 因 workflow ID 在不同 n8n 实例中碰撞而误操作。
-- 将 active production workflow 的结构编辑和显式 activation/deactivation 混为一谈。
-
-## 密钥和凭据策略
-
-不要在 prompt 或 node parameters 中写入 API key、OAuth secret、password、bearer token、webhook signing secret 等明文密钥。
-
-插件会尽量避免密钥泄漏：
-
-- planner 和 validator 会拒绝常见疑似明文密钥。
-- credential resolver 从本地环境变量读取 credential 值。
-- workflow JSON 中只保存 n8n credential 引用，不保存原始密钥。
-- registry 文件不保存密钥。
-- preview 文件不保存密钥。
-- 普通工具输出不返回密钥值。
-- n8n API 和 MCP 错误会做 redaction 后再暴露。
-
-OAuth 授权仍然需要用户在 n8n UI 中手动完成。插件不会替用户完成浏览器 OAuth consent。
-
-## 配置方式
-
-在 OpenCode 配置中启用插件，并提供 n8n 连接配置。
-
-示例：
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-n8n-builder"],
-  "n8n": {
-    "baseUrl": "https://your-instance.app.n8n.cloud/api/v1",
-    "mcpUrl": "https://your-instance.app.n8n.cloud/mcp-server/http",
-    "mcpToken": "optional-mcp-bearer-token",
-    "credentialEnv": {
-      "slackApi": {
-        "name": "OpenCode Slack",
-        "type": "slackApi",
-        "authMode": "api_key",
-        "env": {
-          "accessToken": "SLACK_BOT_TOKEN"
-        },
-        "docs": ["Slack bot token with chat:write scope"]
-      }
-    }
-  }
-}
-```
-
-环境变量：
-
-- `N8N_API_KEY`：n8n REST API key。
-- `N8N_BASE_URL`：n8n REST API base URL，例如 `https://your-instance.app.n8n.cloud/api/v1`。
-- `N8N_MCP_URL`：n8n MCP endpoint URL，用于 build 和 update preview。
-- `N8N_MCP_TOKEN`：可选，n8n MCP endpoint 需要 Bearer auth 时使用。
-
-配置要求：
-
-- `N8N_BASE_URL` 和 `N8N_API_KEY` 是 build、update、claim、readiness、activation/deactivation 和 inspect 必需配置。
-- `N8N_MCP_URL` 是 build 和 update preview 必需配置。
-- `N8N_MCP_TOKEN` 或 `n8n.mcpToken` 是可选配置；仅当 MCP endpoint 要求 Bearer Token 时才需要。API-only 和 local-only 命令不需要 MCP token。
-- `n8n_list_managed_workflows` 只读取本地 registry，不需要 n8n 连接配置。
-- readiness runtime diagnostics 需要当前 API key 能读取 executions；activation/deactivation 需要当前 API key 能调用 workflow activate/deactivate endpoint。
-
-`N8N_BASE_URL` 和 `N8N_MCP_URL` 可以通过环境变量提供，也可以在 OpenCode config 中用 `n8n.baseUrl` 和 `n8n.mcpUrl` 提供。
-
-`N8N_API_KEY` 也可以通过 `n8n.apiKey` 提供，但更推荐使用环境变量，减少本地配置文件中的密钥暴露。
-
-`N8N_MCP_TOKEN` 也可以通过 `n8n.mcpToken` 提供。插件会以 Bearer token 形式发送到 MCP JSON-RPC endpoint；没有配置 token 时不会添加 Authorization header。
-
-## Credential 映射
-
-`n8n.credentialEnv` 用于告诉插件如何根据本地环境变量创建或复用 n8n credential。key 必须匹配 workflow node 使用的 credential type，例如 `slackApi`、`httpHeaderAuth`、`smtp` 或 `gmailOAuth2`。
-
-每个映射支持：
-
-- `name`：n8n 中要复用或创建的 credential 名称。
-- `type`：n8n credential type。
-- `env`：credential data 字段到本地环境变量名的映射。这里写的是环境变量名，不是 secret 值。
-- `authMode`：可选，`api_key`、`oauth2` 或 `manual`。
-- `setupUrl`：可选，指向公开文档或内部 setup 页面。
-- `docs`：可选，返回给用户的公开说明文本或文档链接。
-
-Slack bot token 示例：
-
-```json
-{
-  "n8n": {
-    "credentialEnv": {
-      "slackApi": {
-        "name": "OpenCode Slack",
-        "type": "slackApi",
-        "authMode": "api_key",
-        "env": {
-          "accessToken": "SLACK_BOT_TOKEN"
-        },
-        "docs": ["Use a Slack bot token with chat:write scope."]
-      }
-    }
-  }
-}
-```
-
-HTTP Header Auth / 通用 API key 示例：
-
-```json
-{
-  "n8n": {
-    "credentialEnv": {
-      "httpHeaderAuth": {
-        "name": "OpenCode Vendor API",
-        "type": "httpHeaderAuth",
-        "authMode": "api_key",
-        "env": {
-          "name": "VENDOR_API_HEADER_NAME",
-          "value": "VENDOR_API_KEY"
-        },
-        "docs": ["Set VENDOR_API_HEADER_NAME to Authorization or X-API-Key as required by the vendor."]
-      }
-    }
-  }
-}
-```
-
-SMTP 多环境变量示例：
-
-```json
-{
-  "n8n": {
-    "credentialEnv": {
-      "smtp": {
-        "name": "OpenCode SMTP",
-        "type": "smtp",
-        "authMode": "api_key",
-        "env": {
-          "user": "SMTP_USER",
-          "password": "SMTP_PASSWORD",
-          "host": "SMTP_HOST",
-          "port": "SMTP_PORT"
-        },
-        "docs": ["Use a dedicated SMTP app password if your provider supports it."]
-      }
-    }
-  }
-}
-```
-
-Gmail OAuth handoff 示例：
-
-```json
-{
-  "n8n": {
-    "credentialEnv": {
-      "gmailOAuth2": {
-        "name": "OpenCode Gmail",
-        "type": "gmailOAuth2",
-        "authMode": "oauth2",
-        "env": {},
-        "setupUrl": "https://docs.n8n.io/integrations/builtin/credentials/google/",
-        "docs": ["Create or authorize this OAuth credential in n8n UI, then rerun the OpenCode request."]
-      }
-    }
-  }
-}
-```
-
-不同 n8n 版本或 credential type 的 data 字段可能不同；实际字段名应以当前 n8n credential schema、MCP 文档或 n8n UI 为准。插件只负责按 `env` 映射把环境变量值提交给 n8n credential API，不会在工具输出中回显这些值。
-
-运行时行为：
-
-1. workflow plan 引用了某种 credential type，例如 `slackApi`。
-2. resolver 检查 `n8n.credentialEnv` 中是否有对应映射。
-3. 如果 n8n 中已存在同 type 和 name 的 credential，就复用该引用，并返回 `reuse_existing` action。
-4. 如果不存在，并且所需环境变量都存在，就创建新的 n8n credential，并返回 `create_from_env` action。
-5. 如果配置缺失，workflow 草稿仍可创建，但工具结果会返回 `configure_mapping` action。
-6. 如果环境变量缺失，工具结果会返回 `set_missing_env` action；`requiredEnv` 只包含环境变量名。
-7. 如果 `authMode` 是 `oauth2`，插件不会调用 credential 创建 API，而是返回 `complete_oauth_in_n8n` action。
-
-工具结果会保留旧的 `missingCredentials` 字段，并新增 `credentialActions`：
-
-```json
-{
-  "missingCredentials": [
-    {
-      "nodeName": "Send Slack Alert",
-      "credentialType": "slackApi",
-      "credentialName": "OpenCode Slack",
-      "reason": "Missing environment variables: SLACK_BOT_TOKEN"
-    }
-  ],
-  "credentialActions": [
-    {
-      "nodeName": "Send Slack Alert",
-      "credentialType": "slackApi",
-      "credentialName": "OpenCode Slack",
-      "action": "set_missing_env",
-      "status": "required",
-      "message": "Set missing environment variables for OpenCode Slack: SLACK_BOT_TOKEN.",
-      "requiredEnv": ["SLACK_BOT_TOKEN"],
-      "manualSetupUrl": "https://your-instance.app.n8n.cloud/credentials"
-    }
-  ]
-}
-```
-
-## 本地开发
-
-安装依赖：
-
-```bash
-npm install
-```
-
-运行检查：
-
-```bash
-npm run typecheck
-npm run test
-npm run build
-```
-
-也可以直接运行本地二进制：
-
-```bash
-./node_modules/.bin/tsc --noEmit
-./node_modules/.bin/vitest run
-./node_modules/.bin/tsup
-```
-
-脚本说明：
-
-- `npm run typecheck`：运行 TypeScript 类型检查。
-- `npm run test`：运行 Vitest 测试。
-- `npm run build`：使用 tsup 构建 package 输出。
-- `npm run check`：依次运行 typecheck、test、build。
-
-## 真实 n8n 实例验证（v0.2+）
-
-v0.2 增加了一个显式触发的 E2E 验证层，用本地 Docker n8n 实例验证插件的核心生命周期。v0.3 在该 E2E 层中继续覆盖 MCP `get_suggested_nodes`、`validate_workflow` 和 draft planner 路径。v0.4 继续扩展低风险节点兼容性场景。v0.5 补充 credential setup UX 和错误脱敏的默认测试。v0.6 增加已有 inactive workflow 的 claim/import 场景。v0.7 增加结构化 diff、preview base/proposed 持久化和 rollback 的默认单元测试。v0.8 增加 readiness、activation/deactivation 和 runtime diagnostics 的默认单元测试。v2.0 的 opt-in plugin smoke E2E 覆盖默认 v2 tool surface、complex auto preview、dry-run trial 和 inactive apply path。默认的 `npm test` 不会启动 Docker，也不要求真实 n8n。
-
-前置条件：
-
-- 已安装 Docker 或 Docker Desktop。
-- 能运行 `docker compose`。
-- 已在本地测试 n8n 中创建测试用 API Key。
-
-运行方式：
-
-```bash
-N8N_E2E_API_KEY=<你的测试 API Key> npm run test:e2e
-```
-
-该命令会启动 `docker-compose.e2e.yml` 中定义的 n8n `2.23.4` 测试实例，等待 n8n 可访问，将 `N8N_E2E_BASE_URL`、`N8N_E2E_MCP_URL`、`N8N_E2E_API_KEY` 和可选 MCP token 映射给测试进程，然后运行 `tests/e2e/**/*.e2e.test.ts`。该 Docker stack 会通过环境变量启用 instance-level MCP access；如果你覆盖镜像版本并希望继续用环境变量自动启用 MCP，请使用支持 env-managed MCP settings 的 n8n `2.20.0` 或更高版本。更早但已支持 workflow-builder MCP 的版本需要在 UI 中手动启用 MCP access。
-
-首次创建 API Key：
-
-如果没有传入 `N8N_E2E_API_KEY`，runner 会先检查 Docker 和 `docker compose`。如果 Docker 本身不可用，会更早失败并输出 Docker 诊断。Docker 可用时，runner 会启动本地 n8n 并提示打开：
-
-```text
-http://localhost:5678
-```
-
-在 n8n UI 中完成初始化并创建测试 API Key 后，重新运行：
-
-```bash
-N8N_E2E_API_KEY=<你的测试 API Key> npm run test:e2e
-```
-
-MCP 配置：
-
-- 默认 MCP URL 是 `http://127.0.0.1:5678/mcp-server/http`。
-- 如果 n8n MCP endpoint 需要 Bearer Token，可传入 `N8N_E2E_MCP_TOKEN`：
-
-```bash
-N8N_E2E_API_KEY=<你的测试 API Key> N8N_E2E_MCP_TOKEN=<你的 MCP Token> npm run test:e2e
-```
-
-调试模式：
-
-```bash
-N8N_E2E_KEEP_ALIVE=1 N8N_E2E_API_KEY=<你的测试 API Key> npm run test:e2e
-```
-
-调试模式会让 Docker stack 在测试结束后继续运行，方便进入 n8n UI 查看 workflow 和日志。默认 runner 在成功或普通失败清理时会停止容器并移除 orphan container，但不会删除 n8n Docker volume；首次 bootstrap 缺少 API Key 时也会保留 volume，避免丢失已经完成的本地初始化。只有显式设置 `N8N_E2E_REMOVE_VOLUMES=1` 时，cleanup 才会移除 volume。
-
-## 测试覆盖
-
-v1.0.0 默认测试覆盖：
-
-- OpenCode 插件注册和工具 wiring。
-- 配置从环境变量和 OpenCode config 中加载。
-- n8n MCP JSON-RPC envelope、content parsing 和错误 redaction。
-- n8n MCP Bearer token 配置和请求 header。
-- n8n MCP `get_suggested_nodes` 和 `validate_workflow` 客户端调用。
-- 节点兼容性 catalog、tier 分类、planner compatibility guidance 和 dynamic node warning。
-- planner draft schema、nodeSelection 理由和 workflow-to-SDK validation code 生成。
-- build/update preview 保存前的 MCP validation 阻断与 warning 输出。
-- build/update preview 对 `tier_3_dynamic` 节点返回 `NODE_COMPATIBILITY_DYNAMIC` warning。
-- n8n REST API workflow 和 credential 调用。
-- n8n API 非 2xx 响应体的递归 redaction。
-- MCP JSON-RPC `error.data` 的递归 redaction。
-- planner JSON 提取和校验。
-- workflow compiler 行为。
-- workflow validator 的结构校验、secret 检测、连接校验和托管 marker 校验。
-- credential resolver 行为。
-- credential setup action helper。
-- build/update 结果中的 `credentialActions`。
-- credential config metadata：`authMode`、`setupUrl`、`docs`。
-- workflow ownership state helper。
-- claim workflow preview/apply、confirm、registry repair 和阻断条件。
-- workflow diff 模型、secret redaction、diff empty-state 判断。
-- n8n API activation/deactivation endpoint wrapper、execution list parsing 和 malformed response 处理。
-- readiness preview 的托管校验、MCP validation check、webhook/schedule activation warning 和 runtime diagnostics fallback。
-- readiness activate/deactivate 的 `confirm` 门禁、warning 放行、blocking check 阻断和 registry 刷新。
-- package metadata、version sync、docs handoff、example config JSON 和 changelog 覆盖。
-- public package contract exports、public contract docs、compatibility docs 和 security review docs 覆盖。
-- registry 和 preview store 持久化，包括 update preview 的 `baseWorkflow`、`proposedWorkflow` 和 `diff` 结构校验。
-- build workflow 编排。
-- update preview/apply 安全边界、结构化 diff 返回和 rollback preview/apply/stale 阻断。
-- 插件 update mode schema、rollback 参数路由、readiness 工具 wiring，以及 patch planner 最小变更提示。
-- inspect/list 安全边界。
-- v0.4 低风险场景 fixture：webhook transform response、schedule/http/if/set、webhook branch merge、API polling notice。
-
-v1.0.0 opt-in E2E 覆盖：
-
-- Docker runner 的 Docker/Compose 诊断、n8n readiness、API Key bootstrap 提示、环境变量映射和 cleanup 参数。
-- 真实 n8n API lifecycle：创建、读取、更新和清理测试 workflow。
-- 真实 MCP endpoint smoke 检查，覆盖 `get_sdk_reference`、`search_nodes`、`get_node_types`、`get_suggested_nodes` 和 `validate_workflow`；需要 Bearer auth 时支持 `N8N_E2E_MCP_TOKEN`。
-- 插件 smoke E2E：通过插件工具路径连接真实测试配置。
-- v0.4 低风险兼容性场景：Webhook + Set + Respond to Webhook、Schedule + HTTP Request + IF + Set、Webhook + Switch + Merge、Schedule + HTTP Request + IF + Set notice。
-- v0.6 claim/import 场景：创建外部 inactive workflow -> claim preview -> claim apply -> inspect -> update preview。
-- v0.7 尚未新增 Docker E2E rollback 场景；rollback 当前由默认单元测试覆盖。
-- v0.8 尚未新增 Docker E2E activation/deactivation 场景；readiness 和 activation 当前由默认单元测试覆盖。
-- v0.9 主要是 packaging/docs/CI readiness；未新增 Docker E2E runtime 场景。
-- v1.0 主要是 contract freeze 和 release candidate hardening；未新增 Docker E2E runtime 场景。
-
-v1.0.0 最近一次本地验证结果（不含 Docker E2E）：
-
-- TypeScript：`./node_modules/.bin/tsc --noEmit` 通过。
-- Vitest：`./node_modules/.bin/vitest run` 通过，24 个测试文件，235 个测试通过。
-- Build：`./node_modules/.bin/tsup` 通过。
-- Package boundary：`node scripts/check-package-files.mjs` 通过。
-- npm pack：当前 Codex desktop shell 中 `npm` 不可用，`npm pack --dry-run --json` 需要在 CI 或带 npm 的本地 shell 中复跑。
-- 当前环境没有 Docker CLI，`env -u N8N_E2E_API_KEY node scripts/run-e2e.mjs` 返回 `spawn docker ENOENT` 诊断；有 Docker 和本地测试 API Key 时再运行 `N8N_E2E_API_KEY=<你的测试 API Key> npm run test:e2e` 做完整 E2E。
-
-## 当前版本状态
-
-`1.0.0` 是 stable contract release candidate：
-
-- 插件运行时已接入 OpenCode。
-- package entrypoint 已导出公开契约类型，便于外部 wrapper、测试和集成文档引用。
-- public contract、compatibility 和 security review 文档已加入 `docs/`。
-- build/update/claim/readiness/inspect/list 六个工具已实现。
-- 安装、配置、credential setup、operations、troubleshooting 和 release checklist 文档已加入 `docs/`。
-- local n8n、n8n Cloud、MCP token 和 credential mapping 示例已加入 `examples/`。
-- package metadata、package files 和 package boundary check 已准备好，方便后续 `npm pack --dry-run` 审查。
-- `CHANGELOG.md` 记录 v0.1.0 到 v0.9.0 的版本变化。
-- workflow ownership 和 active workflow 安全限制已实现。
-- `n8n_claim_workflow` 支持只读 preview 和需要 `confirm: true` 的 apply。
-- 未托管 inactive workflow 可以被显式接管，已带本插件 marker 但缺 registry 的 workflow 可以修复 registry。
-- active workflow、不兼容 owner、registry base URL mismatch、疑似明文密钥都会阻断 claim。
-- update preview 会返回结构化 `diff`，并保存 preview 前后的 workflow 快照。
-- update apply 会返回保存的 preview `diff`。
-- rollback preview/apply 已实现，并要求当前 workflow 仍匹配已应用 preview 的 proposed hash。
-- rollback apply 会恢复到 preview 前的 base workflow，并刷新 registry hash。
-- `n8n_check_workflow_readiness` 已实现只读 readiness preview、runtime diagnostics fallback、显式 activation/deactivation 和 registry 刷新。
-- `n8n_update_workflow` 仍保持 inactive-only；active workflow 只能通过 readiness 工具显式激活或停用，不能做结构性更新。
-- patch planner prompt 已强化为最小变更优先，避免不必要地改动未触及的节点、credential 和连接。
-- credential 引用和明文密钥防护已实现。
-- build 和 update preview 会返回 `credentialActions`，说明 credential 已复用、已创建或需要用户补操作。
-- OAuth credential 会返回 n8n UI handoff 指引，不自动完成 OAuth 授权。
-- 缺失 credential mapping 或环境变量时，工具结果只包含公开配置项和环境变量名。
-- 默认单元测试保持 Docker-free。
-- 真实 n8n Docker E2E 已作为显式 opt-in 验证路径加入。
-- build 和 update preview 已在保存前接入 n8n MCP `validate_workflow`。
-- MCP warnings 会随工具结果返回，MCP errors 会阻止保存。
-- planner 已接入 node compatibility guidance。
-- build 和 update preview 会为未提交兼容性场景的动态节点返回 `NODE_COMPATIBILITY_DYNAMIC` warning。
-- n8n API/MCP 错误详情会递归脱敏后再暴露。
-- README 中的节点支持声明按兼容性 tier 区分，不把动态支持表述为完整验证。
-- README 描述的是当前真实支持范围；除非实际运行 `npm run test:e2e`，不要把 Docker E2E 视为已在当前机器通过。
-
-## 后续路线
-
-可能的后续方向：
-
-- 继续扩展节点兼容性矩阵和真实 n8n 场景覆盖。
-- 为 update diff 增加可视化展示、历史浏览和更细粒度的参数解释。
-- 在更高版本中探索受控的 active workflow 结构编辑和更完整的上线审计。
-- 在 n8n API 支持明确后增加 project/folder placement。
-- 增强 credential provider 支持。
-- 深化已有 workflow claim/import 的场景覆盖，例如更丰富的风险解释和迁移辅助。
-- 针对更多真实 workflow 形态加强 workflow-to-SDK validation code 生成覆盖。
-- 完善 OpenCode 插件发布和安装文档。
-
 ## License
 
-Apache-2.0，和仓库中的 `LICENSE` 文件以及 `package.json` 保持一致。
+Apache-2.0. See [LICENSE](LICENSE).
