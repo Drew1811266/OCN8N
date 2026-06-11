@@ -94,6 +94,7 @@ describe("plugin exports", () => {
       "n8n_v2_patch_plan",
       "n8n_v2_validate_simulate",
       "n8n_v2_compile_preview",
+      "n8n_v2_apply",
     ])
     expect(Object.keys(result.tool?.n8n_build_workflow.args ?? {})).toEqual(["prompt", "name"])
     expect(Object.keys(result.tool?.n8n_update_workflow.args ?? {})).toEqual(["workflowId", "prompt", "mode", "previewId"])
@@ -116,6 +117,7 @@ describe("plugin exports", () => {
     expect(Object.keys(result.tool?.n8n_v2_patch_plan.args ?? {})).toEqual(["planId", "planVersion", "patch"])
     expect(Object.keys(result.tool?.n8n_v2_validate_simulate.args ?? {})).toEqual(["planId", "planVersion"])
     expect(Object.keys(result.tool?.n8n_v2_compile_preview.args ?? {})).toEqual(["planId", "planVersion"])
+    expect(Object.keys(result.tool?.n8n_v2_apply.args ?? {})).toEqual(["previewId", "confirm"])
   })
 
   it("routes rollback update modes without requiring MCP configuration", async () => {
@@ -366,6 +368,75 @@ describe("plugin exports", () => {
           expect.objectContaining({
             workflowId: "wf_1",
             name: "Orders",
+          }),
+        )
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    })
+  })
+
+  it("applies a v2 preview through API config without requiring MCP configuration", async () => {
+    await withoutN8nEnv(async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-v2-apply-"))
+      const plugin = createN8nBuilderPlugin({ version: "2.0.0" })
+      const result = await plugin(
+        mockPluginInput({
+          directory,
+          opencodeConfig: {
+            n8n: {
+              baseUrl: "https://demo/api/v1",
+              apiKey: "key",
+            },
+          },
+        }),
+      )
+
+      const preview = parseToolOutput(
+        await result.tool?.n8n_v2_auto_preview.execute(
+          {
+            prompt: "Receive an order webhook and respond to the webhook.",
+            name: "V2 order intake",
+          },
+          {} as never,
+        ),
+      ) as { previewId: string; planId: string; planVersion: number }
+
+      const originalFetch = globalThis.fetch
+      const fetchMock = vi.fn(async (_input: string, init?: RequestInit) => {
+        const workflow = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>
+        return new Response(JSON.stringify({ ...workflow, id: "wf_v2_1" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      })
+      globalThis.fetch = fetchMock as typeof fetch
+
+      try {
+        const applied = parseToolOutput(
+          await result.tool?.n8n_v2_apply.execute(
+            {
+              previewId: preview.previewId,
+              confirm: true,
+            },
+            {} as never,
+          ),
+        ) as { workflowId: string; mode: string; previewId: string; planId: string; planVersion: number }
+
+        expect(fetchMock).toHaveBeenCalledWith(
+          "https://demo/api/v1/workflows",
+          expect.objectContaining({
+            method: "POST",
+            headers: expect.objectContaining({ "X-N8N-API-KEY": "key" }),
+          }),
+        )
+        expect(applied).toEqual(
+          expect.objectContaining({
+            workflowId: "wf_v2_1",
+            mode: "create",
+            previewId: preview.previewId,
+            planId: preview.planId,
+            planVersion: preview.planVersion,
           }),
         )
       } finally {

@@ -16,6 +16,7 @@ import {
 import { inspectWorkflow } from "./tools/inspect-workflow.js"
 import { listManagedWorkflows } from "./tools/list-managed-workflows.js"
 import { updateWorkflow, type UpdateWorkflowArgs } from "./tools/update-workflow.js"
+import { applyV2Preview } from "./tools/v2-apply.js"
 import { autoPreviewV2Workflow } from "./tools/v2-auto-preview.js"
 import { compileV2Preview } from "./tools/v2-compile-preview.js"
 import { createV2Plan } from "./tools/v2-create-plan.js"
@@ -24,6 +25,7 @@ import { reviewV2PlanTool } from "./tools/v2-review-plan.js"
 import { validateSimulateV2Plan } from "./tools/v2-validate-simulate.js"
 import { V2PlanStore } from "./v2/plan-store.js"
 import { V2PreviewStore } from "./v2/preview-store.js"
+import { V2WorkflowRegistry } from "./v2/registry.js"
 
 export type N8nBuilderPluginOptions = {
   version?: string
@@ -77,6 +79,9 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
         api,
         registry: new WorkflowRegistry(config.registryPath),
         previewStore: new PreviewStore(config.previewDir),
+        v2PlanStore: new V2PlanStore(config.v2.plansDir),
+        v2PreviewStore: new V2PreviewStore(config.v2.previewsDir),
+        v2Registry: new V2WorkflowRegistry(config.v2.registryPath),
       }
     }
 
@@ -366,6 +371,30 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
             })
 
             return jsonOutput("v2 n8n workflow preview compiled", result)
+          },
+        }),
+
+        n8n_v2_apply: tool({
+          description: "Create a new inactive n8n workflow from a compiled v2 preview after explicit confirmation.",
+          args: {
+            previewId: tool.schema.string().min(1),
+            confirm: tool.schema.boolean(),
+          },
+          async execute(args) {
+            const resolved = await apiDeps()
+            const result = await applyV2Preview({
+              args,
+              config: {
+                baseUrl: resolved.config.baseUrl,
+                pluginVersion: resolved.config.pluginVersion,
+              },
+              api: resolved.api,
+              planStore: resolved.v2PlanStore,
+              previewStore: resolved.v2PreviewStore,
+              registry: resolved.v2Registry,
+            })
+
+            return jsonOutput("v2 n8n workflow preview applied", result)
           },
         }),
       },

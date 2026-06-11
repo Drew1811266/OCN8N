@@ -16,6 +16,8 @@ import type {
   UpdateWorkflowArgs,
   UpdateWorkflowResult,
   V2ArtifactPaths,
+  V2ApplyArgs,
+  V2ApplyResult,
   V2AutoPreviewArgs,
   V2AutoPreviewResult,
   V2CompiledPreview,
@@ -283,6 +285,10 @@ describe("public package contract exports", () => {
       planId: version.planId,
       planVersion: version.planVersion,
     }
+    const applyArgs: V2ApplyArgs = {
+      previewId: "123e4567-e89b-12d3-a456-426614174000",
+      confirm: true,
+    }
     const mappingTrace: V2PreviewMappingTrace = {
       stepId: "step_receive",
       patternIds: ["pattern_trigger_1"],
@@ -343,6 +349,19 @@ describe("public package contract exports", () => {
       mappingTrace: [mappingTrace],
       warnings: [],
     }
+    const applyResult: V2ApplyResult = {
+      workflowId: "wf_1",
+      name: "Orders",
+      url: "https://demo/workflow/wf_1",
+      mode: "create",
+      previewId: previewArtifact.previewId,
+      planId: version.planId,
+      planVersion: version.planVersion,
+      nodeCount: previewWorkflow.nodes.length,
+      workflowHash: "created_workflow_hash",
+      validationStatus: "passed",
+      warnings: [],
+    }
     const registry: V2RegistryRecord = {
       workflowId: "wf_1",
       name: "Orders",
@@ -373,12 +392,14 @@ describe("public package contract exports", () => {
       patchResult,
       validateArgs,
       compileArgs,
+      applyArgs,
       mappingTrace,
       simulation,
       previewWorkflow,
       previewArtifact,
       compileResult,
       autoPreviewResult,
+      applyResult,
       registry,
     }).toBeDefined()
   })
