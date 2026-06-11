@@ -92,6 +92,7 @@ describe("plugin exports", () => {
       "n8n_v2_review_plan",
       "n8n_v2_patch_plan",
       "n8n_v2_validate_simulate",
+      "n8n_v2_compile_preview",
     ])
     expect(Object.keys(result.tool?.n8n_build_workflow.args ?? {})).toEqual(["prompt", "name"])
     expect(Object.keys(result.tool?.n8n_update_workflow.args ?? {})).toEqual(["workflowId", "prompt", "mode", "previewId"])
@@ -112,6 +113,7 @@ describe("plugin exports", () => {
     expect(Object.keys(result.tool?.n8n_v2_review_plan.args ?? {})).toEqual(["planId", "planVersion"])
     expect(Object.keys(result.tool?.n8n_v2_patch_plan.args ?? {})).toEqual(["planId", "planVersion", "patch"])
     expect(Object.keys(result.tool?.n8n_v2_validate_simulate.args ?? {})).toEqual(["planId", "planVersion"])
+    expect(Object.keys(result.tool?.n8n_v2_compile_preview.args ?? {})).toEqual(["planId", "planVersion"])
   })
 
   it("routes rollback update modes without requiring MCP configuration", async () => {
@@ -243,6 +245,24 @@ describe("plugin exports", () => {
           planVersion: patched.planVersion,
           status: "passed",
         }),
+      )
+
+      const compiled = parseToolOutput(
+        await result.tool?.n8n_v2_compile_preview.execute(
+          { planId: patched.planId, planVersion: patched.planVersion },
+          {} as never,
+        ),
+      ) as { planId: string; planVersion: number; previewId: string; nodeCount: number; validationStatus: string }
+      expect(compiled).toEqual(
+        expect.objectContaining({
+          planId: patched.planId,
+          planVersion: patched.planVersion,
+          nodeCount: expect.any(Number),
+          validationStatus: "passed",
+        }),
+      )
+      expect(compiled.previewId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       )
     })
   })

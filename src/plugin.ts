@@ -16,11 +16,13 @@ import {
 import { inspectWorkflow } from "./tools/inspect-workflow.js"
 import { listManagedWorkflows } from "./tools/list-managed-workflows.js"
 import { updateWorkflow, type UpdateWorkflowArgs } from "./tools/update-workflow.js"
+import { compileV2Preview } from "./tools/v2-compile-preview.js"
 import { createV2Plan } from "./tools/v2-create-plan.js"
 import { patchV2PlanTool } from "./tools/v2-patch-plan.js"
 import { reviewV2PlanTool } from "./tools/v2-review-plan.js"
 import { validateSimulateV2Plan } from "./tools/v2-validate-simulate.js"
 import { V2PlanStore } from "./v2/plan-store.js"
+import { V2PreviewStore } from "./v2/preview-store.js"
 
 export type N8nBuilderPluginOptions = {
   version?: string
@@ -52,6 +54,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
         config,
         registry: new WorkflowRegistry(config.registryPath),
         v2PlanStore: new V2PlanStore(config.v2.plansDir),
+        v2PreviewStore: new V2PreviewStore(config.v2.previewsDir),
       }
     }
 
@@ -323,6 +326,25 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
             })
 
             return jsonOutput("v2 n8n workflow plan validation and simulation", result)
+          },
+        }),
+
+        n8n_v2_compile_preview: tool({
+          description: "Compile a validated v2 business workflow plan version into a local n8n workflow preview artifact.",
+          args: {
+            planId: tool.schema.string().min(1),
+            planVersion: tool.schema.number().int().min(1),
+          },
+          async execute(args) {
+            const resolved = await localDeps()
+            const result = await compileV2Preview({
+              args,
+              planStore: resolved.v2PlanStore,
+              previewStore: resolved.v2PreviewStore,
+              pluginVersion: resolved.config.pluginVersion,
+            })
+
+            return jsonOutput("v2 n8n workflow preview compiled", result)
           },
         }),
       },

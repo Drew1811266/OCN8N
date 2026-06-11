@@ -25,6 +25,7 @@ export type {
   WorkflowNodeSummary,
 } from "./tools/inspect-workflow.js"
 export type { ListManagedWorkflowsResult } from "./tools/list-managed-workflows.js"
+export type { V2CompilePreviewArgs, V2CompilePreviewResult } from "./tools/v2-compile-preview.js"
 export type { V2CreatePlanArgs, V2CreatePlanResult } from "./tools/v2-create-plan.js"
 export type { V2PatchPlanArgs, V2PatchPlanResult } from "./tools/v2-patch-plan.js"
 export type { V2ReviewPlanArgs } from "./tools/v2-review-plan.js"
@@ -35,6 +36,7 @@ export type {
   V2PatternCatalogEntry,
   V2PatternVariantCatalogEntry,
 } from "./v2/pattern-catalog.js"
+export type { V2CompiledPreview, V2PreviewMappingTrace } from "./v2/preview-store.js"
 
 export type {
   CredentialActionStatus,

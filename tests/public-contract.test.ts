@@ -16,6 +16,9 @@ import type {
   UpdateWorkflowArgs,
   UpdateWorkflowResult,
   V2ArtifactPaths,
+  V2CompiledPreview,
+  V2CompilePreviewArgs,
+  V2CompilePreviewResult,
   V2CreatePlanArgs,
   V2CreatePlanResult,
   V2PatchPlanArgs,
@@ -26,6 +29,7 @@ import type {
   V2PlanPattern,
   V2PlanReview,
   V2PlanVersion,
+  V2PreviewMappingTrace,
   V2RegistryRecord,
   V2ReviewPlanArgs,
   V2SimulationResult,
@@ -272,6 +276,16 @@ describe("public package contract exports", () => {
       planId: version.planId,
       planVersion: version.planVersion,
     }
+    const compileArgs: V2CompilePreviewArgs = {
+      planId: version.planId,
+      planVersion: version.planVersion,
+    }
+    const mappingTrace: V2PreviewMappingTrace = {
+      stepId: "step_receive",
+      patternIds: ["pattern_trigger_1"],
+      nodeNames: ["Receive order"],
+      notes: ["Compiled trigger pattern."],
+    }
     const simulation: V2SimulationResult = {
       planId: version.planId,
       planVersion: version.planVersion,
@@ -280,6 +294,35 @@ describe("public package contract exports", () => {
       issues: [],
       sampleResults: [],
       fieldTraces: [],
+    }
+    const previewWorkflow: N8nWorkflow = {
+      name: "Orders",
+      active: false,
+      nodes: [],
+      connections: {},
+      settings: {},
+    }
+    const previewArtifact: V2CompiledPreview = {
+      previewId: "123e4567-e89b-12d3-a456-426614174000",
+      planId: version.planId,
+      planVersion: version.planVersion,
+      workflow: previewWorkflow,
+      workflowHash: "workflow_hash",
+      mappingTrace: [mappingTrace],
+      validationStatus: "passed",
+      warnings: [],
+      createdAt: "2026-06-11T00:00:00.000Z",
+    }
+    const compileResult: V2CompilePreviewResult = {
+      previewId: previewArtifact.previewId,
+      planId: version.planId,
+      planVersion: version.planVersion,
+      workflowName: previewWorkflow.name,
+      nodeCount: previewWorkflow.nodes.length,
+      workflowHash: previewArtifact.workflowHash,
+      validationStatus: "passed",
+      mappingTrace: [mappingTrace],
+      warnings: [],
     }
     const registry: V2RegistryRecord = {
       workflowId: "wf_1",
@@ -309,7 +352,12 @@ describe("public package contract exports", () => {
       patchArgs,
       patchResult,
       validateArgs,
+      compileArgs,
+      mappingTrace,
       simulation,
+      previewWorkflow,
+      previewArtifact,
+      compileResult,
       registry,
     }).toBeDefined()
   })
