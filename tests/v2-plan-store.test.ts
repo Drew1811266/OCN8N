@@ -148,6 +148,24 @@ describe("V2PlanStore", () => {
     expect(raw.endsWith("\n")).toBe(true)
   })
 
+  it("saves reverse plan versions with source reverse", async () => {
+    const store = new V2PlanStore(plansDir())
+    const saved = await store.saveReverse({
+      plan: plan({ trace: ["Reverse planned from claimed workflow wf_1."] }),
+      createdAt: "2026-06-11T04:00:00.000Z",
+      summary: "Reverse planned workflow Orders.",
+    })
+
+    expect(saved.planId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    )
+    expect(saved.planVersion).toBe(1)
+    expect(saved.source).toBe("reverse")
+    expect(saved.summary).toBe("Reverse planned workflow Orders.")
+    expect(saved.contentHash).toBe(stableHash(saved.plan))
+    await expect(store.get(saved.planId, saved.planVersion)).resolves.toEqual(saved)
+  })
+
   it("redacts secret-looking values before persistence", async () => {
     const store = new V2PlanStore(plansDir())
     const sensitivePlan = plan({

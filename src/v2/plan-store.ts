@@ -36,6 +36,20 @@ export class V2PlanStore {
     })
   }
 
+  async saveReverse(input: SaveInitialV2PlanInput): Promise<V2PlanVersion> {
+    const plan = sanitizePlan(input.plan)
+
+    return this.writeVersion({
+      planId: randomUUID(),
+      planVersion: 1,
+      plan,
+      createdAt: input.createdAt,
+      source: "reverse",
+      summary: input.summary,
+      contentHash: stableHash(plan),
+    })
+  }
+
   async saveNext(input: SaveNextV2PlanInput): Promise<V2PlanVersion> {
     if (!isSafePlanId(input.planId) || !isSafeVersion(input.parentPlanVersion)) {
       throw new N8nBuilderError("Invalid v2 plan reference.", "V2_PLAN_INVALID", {
