@@ -78,12 +78,12 @@ Compiles a validated plan version into an inactive n8n workflow preview.
 
 ### `n8n_v2_apply`
 
-Creates a new inactive n8n workflow from a compiled v2 preview.
+Creates a new inactive n8n workflow from a compiled v2 preview, or updates a v2-claimed inactive workflow when `workflowId` is supplied.
 
 - Args type: `V2ApplyArgs`
 - Result type: `V2ApplyResult`
-- Writes: n8n workflow create API and `.opencode/n8n-v2/registry/workflows.json`
-- Safety: requires `confirm: true`, a valid compiled preview, passing validation status, and no blocking credential requirements.
+- Writes: n8n workflow create/update API and `.opencode/n8n-v2/registry/workflows.json`
+- Safety: requires `confirm: true`, a valid compiled preview, passing validation status, and no blocking credential requirements. Update apply also requires an existing full v2 registry claim, matching base URL, inactive current workflow, and matching current workflow hash.
 
 ### `n8n_v2_claim_workflow`
 
@@ -117,7 +117,7 @@ Runs a confirm-gated dry-run trial for a compiled preview.
 - `V2CreatePlanResult`: plan ID/version, summary, pattern count, confidence, risk level, and warnings.
 - `V2AutoPreviewResult`: plan metadata, preview ID, review, simulation, mapping trace, confidence, risk level, and warnings.
 - `V2CompilePreviewResult`: preview ID, plan reference, workflow name, node count, workflow hash, validation status, mapping trace, and warnings.
-- `V2ApplyResult`: created workflow ID, URL, preview reference, plan reference, node count, workflow hash, validation status, and warnings.
+- `V2ApplyResult`: created or updated workflow ID, URL, `mode: "create" | "update"`, preview reference, plan reference, node count, workflow hash, validation status, and warnings.
 - `V2ClaimWorkflowResult`: claim action, eligibility, claim mode, active state, workflow summary, risks, marker/registry write status, and workflow hash.
 - `V2ReversePlanResult`: reverse plan ID/version, confidence, risk level, mapped step count, unmapped nodes, warnings, and workflow hash.
 - `V2RunTrialResult`: run ID, preview and plan reference, dry-run status, `triggered: false`, execution mode, cleanup flag, warnings, and summary.
@@ -150,6 +150,9 @@ Known v2 codes include:
 - `V2_PREVIEW_NOT_FOUND`
 - `V2_PREVIEW_NOT_VALID`
 - `V2_APPLY_CONFIRM_REQUIRED`
+- `V2_APPLY_ACTIVE_WORKFLOW`
+- `V2_APPLY_READ_ONLY_CLAIM`
+- `V2_APPLY_WORKFLOW_STALE`
 - `V2_CREDENTIALS_BLOCK_APPLY`
 - `V2_CLAIM_CONFIRM_REQUIRED`
 - `V2_WORKFLOW_NOT_CLAIMED`

@@ -83,6 +83,7 @@ describe("release documentation", () => {
     expect(readme).toContain("n8n_v2_claim_workflow")
     expect(readme).toContain("n8n_v2_reverse_plan")
     expect(readme).toContain("n8n_v2_run_trial")
+    expect(readme).toContain("v2-claimed inactive workflow")
     expect(readme).toContain("docs/installation.md")
     expect(readme).toContain("docs/release-checklist.md")
     expect(readme).toContain("docs/public-contract.md")
@@ -146,6 +147,7 @@ describe("release documentation", () => {
       "V2TrialRunArtifact",
       "V2ArtifactPaths",
       "N8nBuilderError",
+      "v2-claimed inactive workflow",
     ]) {
       expect(publicContract).toContain(term)
     }

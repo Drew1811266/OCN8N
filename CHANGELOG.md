@@ -8,6 +8,7 @@ All notable changes for `opencode-n8n-builder` are documented here.
 - Default plugin surface now exposes `n8n_v2_auto_preview`, `n8n_v2_create_plan`, `n8n_v2_review_plan`, `n8n_v2_patch_plan`, `n8n_v2_validate_simulate`, `n8n_v2_compile_preview`, `n8n_v2_apply`, `n8n_v2_claim_workflow`, `n8n_v2_reverse_plan`, and `n8n_v2_run_trial`.
 - Isolated v2 artifacts under `.opencode/n8n-v2/`, including plan versions, compiled previews, and v2 registry records.
 - Added explicit v2 claim/import rules with `opencode-n8n-builder-v2` ownership and active workflow read-only claim support.
+- Added `n8n_v2_apply` update support for v2-claimed inactive workflows with registry ownership, base URL, active-state, and stale-hash guards.
 - Added reverse planning for v2-claimed workflows with honest unmapped-node and uncertainty reporting.
 - Added confirm-gated dry-run trial artifacts that re-run local validation/simulation without triggering n8n or external APIs.
 - v1 artifacts are not silently migrated; users must use v2 claim/import for old workflows.

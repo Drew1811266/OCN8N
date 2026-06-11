@@ -83,18 +83,19 @@
 
 ## `n8n_v2_apply`
 
-用途：把 compiled preview 创建为新的 inactive n8n workflow。
+用途：把 compiled preview 创建为新的 inactive n8n workflow，或更新 v2-claimed inactive workflow。
 
 参数：
 
 - `previewId`：必填。
 - `confirm`：必须为 `true`。
+- `workflowId`：可选。省略时创建新 inactive workflow；提供时更新对应 v2-claimed inactive workflow。
 
-行为：读取 preview 和对应 plan version，确认 validation status 没有失败且 credential requirement 不阻断 apply，然后调用 n8n create workflow API。
+行为：读取 preview 和对应 plan version，确认 validation status 没有失败且 credential requirement 不阻断 apply。未提供 `workflowId` 时调用 n8n create workflow API。提供 `workflowId` 时读取 v2 registry 和当前 n8n workflow，要求 registry base URL 匹配、claim mode 为 `full`、当前 workflow inactive、当前 workflow hash 匹配 registry，然后调用 n8n update workflow API。
 
-写操作：创建 inactive n8n workflow，并写 `.opencode/n8n-v2/registry/workflows.json`。
+写操作：创建新的 inactive n8n workflow 或更新 v2-claimed inactive workflow，并写 `.opencode/n8n-v2/registry/workflows.json`。
 
-安全限制：不更新现有 workflow，不结构性修改 active workflow，不在缺失 credential 时 apply。
+安全限制：不结构性修改 active workflow，不更新 read-only claimed workflow，不在 registry base URL mismatch 或 stale hash 时 apply，不在缺失 credential 时 apply。
 
 ## `n8n_v2_claim_workflow`
 

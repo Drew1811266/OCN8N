@@ -202,6 +202,11 @@ describe("public package contract exports", () => {
       previewId: "123e4567-e89b-12d3-a456-426614174000",
       confirm: true,
     }
+    const updateApplyArgs: V2ApplyArgs = {
+      previewId: "123e4567-e89b-12d3-a456-426614174000",
+      workflowId: "wf_1",
+      confirm: true,
+    }
     const claimArgs: V2ClaimWorkflowArgs = {
       workflowId: "wf_1",
       mode: "apply",
@@ -315,6 +320,19 @@ describe("public package contract exports", () => {
       validationStatus: "passed",
       warnings: [],
     }
+    const updateApplyResult: V2ApplyResult = {
+      workflowId: "wf_1",
+      name: "Orders",
+      url: "https://demo/workflow/wf_1",
+      mode: "update",
+      previewId: previewArtifact.previewId,
+      planId: version.planId,
+      planVersion: version.planVersion,
+      nodeCount: workflow.nodes.length,
+      workflowHash: "updated_workflow_hash",
+      validationStatus: "passed",
+      warnings: [],
+    }
     const claimAction: V2ClaimWorkflowAction = "claim_full"
     const claimRiskCode: V2ClaimWorkflowRiskCode = "V1_OWNERSHIP_RESET"
     const claimRisk: V2ClaimWorkflowRisk = {
@@ -395,6 +413,7 @@ describe("public package contract exports", () => {
       validateArgs,
       compileArgs,
       applyArgs,
+      updateApplyArgs,
       claimArgs,
       reverseArgs,
       mappingTrace,
@@ -403,6 +422,7 @@ describe("public package contract exports", () => {
       compileResult,
       autoPreviewResult,
       applyResult,
+      updateApplyResult,
       runTrialArgs,
       trialMode,
       trialExecutionMode,

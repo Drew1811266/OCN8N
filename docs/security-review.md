@@ -8,11 +8,11 @@ Scope: v2.0 public contract reset for `opencode-n8n-builder`.
 
 ### No silent n8n writes
 
-`n8n_v2_auto_preview`, `n8n_v2_create_plan`, `n8n_v2_review_plan`, `n8n_v2_patch_plan`, `n8n_v2_validate_simulate`, `n8n_v2_compile_preview`, `n8n_v2_reverse_plan`, and `n8n_v2_run_trial` do not write to n8n. `n8n_v2_apply` requires `confirm: true` and creates a new inactive workflow from a validated compiled preview. `n8n_v2_claim_workflow` requires `confirm: true` for apply.
+`n8n_v2_auto_preview`, `n8n_v2_create_plan`, `n8n_v2_review_plan`, `n8n_v2_patch_plan`, `n8n_v2_validate_simulate`, `n8n_v2_compile_preview`, `n8n_v2_reverse_plan`, and `n8n_v2_run_trial` do not write to n8n. `n8n_v2_apply` requires `confirm: true` and either creates a new inactive workflow from a validated compiled preview or updates a v2-claimed inactive workflow after registry, base URL, active-state, and stale-hash checks. `n8n_v2_claim_workflow` requires `confirm: true` for apply.
 
 ### No active workflow structural apply
 
-Active workflows can be v2 claimed only in read-only mode. Active read-only claims can be reviewed, simulated, and reverse planned, but v2.0 does not structurally apply changes to active workflows.
+Active workflows can be v2 claimed only in read-only mode. Active read-only claims can be reviewed, simulated, and reverse planned, but v2.0 does not structurally apply changes to active workflows. `n8n_v2_apply` re-reads the current workflow before update and blocks if it is active.
 
 ### No silent migration from v1 artifacts
 
@@ -36,7 +36,7 @@ v2.0 public tools do not sample execution history. Any future sampling must be e
 
 ### Apply remains preview-guarded
 
-`n8n_v2_apply` requires a stored compiled preview, passing validation status, and no blocking credential requirements before writing to n8n.
+`n8n_v2_apply` requires a stored compiled preview, passing validation status, and no blocking credential requirements before writing to n8n. Update apply additionally requires a full v2 claim and a current workflow hash matching the registry.
 
 ### Error and artifact redaction
 
@@ -51,6 +51,7 @@ n8n API details and persisted plan/preview artifacts use redaction for secret-lo
 - No execution-history sampling without opt-in.
 - No trial run without opt-in.
 - No apply without validated preview version.
+- No update apply without full v2 claim and stale-hash check.
 - No v2 claim/import without explicit user intent.
 - Clear error codes and redacted details.
 

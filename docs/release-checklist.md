@@ -39,7 +39,7 @@
 - [ ] `docs/public-contract.md` 覆盖 v2 tools、result types、`V2ArtifactPaths`、`V2RegistryRecord`、`V2CompiledPreview` 和 `V2TrialRunArtifact`。
 - [ ] `docs/operations.md` 说明 `.opencode/n8n-v2/` artifact root 和 v1 artifact 不自动迁移。
 - [ ] `docs/compatibility.md` 覆盖七个 pattern family：`trigger`、`transform`、`branch`、`loop_batch`、`error_handling`、`external_call`、`output`。
-- [ ] `docs/security-review.md` 记录 no silent n8n writes、no active workflow structural apply、no silent migration from v1 artifacts、no execution-history sampling without opt-in、no trial run without opt-in。
+- [ ] `docs/security-review.md` 记录 no silent n8n writes、no active workflow structural apply、no silent migration from v1 artifacts、no execution-history sampling without opt-in、no trial run without opt-in，以及 v2-claimed inactive workflow update apply 的 stale-hash 防护。
 - [ ] `tests/plugin.test.ts`、`tests/public-contract.test.ts`、`tests/package-metadata.test.ts` 和 `tests/docs-release.test.ts` 通过。
 
 ## Pack Review

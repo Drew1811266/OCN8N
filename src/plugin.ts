@@ -187,6 +187,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
           args: {
             previewId: tool.schema.string().min(1),
             confirm: tool.schema.boolean(),
+            workflowId: tool.schema.string().optional(),
           },
           async execute(args) {
             const resolved = await apiDeps()

@@ -196,6 +196,7 @@ v1.0.0 是稳定契约 release candidate，不代表发布到 npm 或创建 Git 
 - 支持高级链路：`n8n_v2_create_plan` -> `n8n_v2_review_plan` -> `n8n_v2_patch_plan` -> `n8n_v2_validate_simulate` -> `n8n_v2_compile_preview` -> `n8n_v2_apply`。
 - 支持便利链路：`n8n_v2_auto_preview` 一次性完成 plan、review、validate/simulate 和 compile preview，不写 n8n。
 - 支持 inactive workflow full claim，以及 active workflow read-only claim。
+- 支持 `n8n_v2_apply` 创建新的 inactive workflow，或在提供 `workflowId` 时更新 v2-claimed inactive workflow；更新前会重新读取当前 workflow、阻断 active/read-only/stale/base URL mismatch 场景。
 - 支持 `n8n_v2_reverse_plan` 从 v2-claimed workflow 生成 `source: "reverse"` 的 plan artifact，并报告 unmapped nodes、inferred external contracts 和 credential uncertainty。
 - 支持 `n8n_v2_run_trial` 对 compiled preview 执行 confirm-gated dry-run trial：只重新运行本地 validation/simulation，写入 `.opencode/n8n-v2/runs/`，不触发 n8n 或外部 API。
 - v2 ownership、registry、preview 和 plan artifact 均与 v1 分离；不会 silent migration。
