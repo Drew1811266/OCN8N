@@ -20,6 +20,7 @@ const tools = [
   "n8n_v2_apply",
   "n8n_v2_claim_workflow",
   "n8n_v2_reverse_plan",
+  "n8n_v2_run_trial",
 ]
 
 describe("release documentation", () => {
@@ -81,6 +82,7 @@ describe("release documentation", () => {
     expect(readme).toContain("n8n_v2_auto_preview")
     expect(readme).toContain("n8n_v2_claim_workflow")
     expect(readme).toContain("n8n_v2_reverse_plan")
+    expect(readme).toContain("n8n_v2_run_trial")
     expect(readme).toContain("docs/installation.md")
     expect(readme).toContain("docs/release-checklist.md")
     expect(readme).toContain("docs/public-contract.md")
@@ -138,8 +140,10 @@ describe("release documentation", () => {
       "V2ApplyResult",
       "V2ClaimWorkflowResult",
       "V2ReversePlanResult",
+      "V2RunTrialResult",
       "V2RegistryRecord",
       "V2CompiledPreview",
+      "V2TrialRunArtifact",
       "V2ArtifactPaths",
       "N8nBuilderError",
     ]) {

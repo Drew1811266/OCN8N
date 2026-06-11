@@ -103,6 +103,15 @@ Reverse plans a v2-claimed workflow into a local v2 plan artifact.
 - Writes: local plan version with `source: "reverse"` and updated v2 registry plan metadata.
 - Safety: requires existing v2 registry claim; blocks base URL mismatch; does not write to n8n; returns `V2ReverseUnmappedNode[]` and warnings for unsupported or uncertain semantics.
 
+### `n8n_v2_run_trial`
+
+Runs a confirm-gated dry-run trial for a compiled preview.
+
+- Args type: `V2RunTrialArgs`
+- Result type: `V2RunTrialResult`
+- Writes: immutable `V2TrialRunArtifact` under `.opencode/n8n-v2/runs/`
+- Safety: supports only `mode: "dry_run"`; requires `confirm: true`; re-runs local validation/simulation and does not trigger n8n, create temporary workflows, activate workflows, call external APIs, or sample execution history.
+
 ## Result Types
 
 - `V2CreatePlanResult`: plan ID/version, summary, pattern count, confidence, risk level, and warnings.
@@ -111,8 +120,10 @@ Reverse plans a v2-claimed workflow into a local v2 plan artifact.
 - `V2ApplyResult`: created workflow ID, URL, preview reference, plan reference, node count, workflow hash, validation status, and warnings.
 - `V2ClaimWorkflowResult`: claim action, eligibility, claim mode, active state, workflow summary, risks, marker/registry write status, and workflow hash.
 - `V2ReversePlanResult`: reverse plan ID/version, confidence, risk level, mapped step count, unmapped nodes, warnings, and workflow hash.
+- `V2RunTrialResult`: run ID, preview and plan reference, dry-run status, `triggered: false`, execution mode, cleanup flag, warnings, and summary.
 - `V2RegistryRecord`: v2 registry ownership record with `managedBy: "opencode-n8n-builder-v2"`, claim mode, active-at-claim flag, latest plan/preview metadata, and last update timestamp.
 - `V2CompiledPreview`: immutable local preview artifact with workflow JSON, workflow hash, validation status, warnings, and `V2PreviewMappingTrace[]`.
+- `V2TrialRunArtifact`: immutable local dry-run artifact with simulation result, provenance, warnings, timing, and non-triggered execution metadata.
 - `V2ArtifactPaths`: isolated v2 artifact paths under `.opencode/n8n-v2/`.
 
 ## Persisted Artifacts
@@ -122,7 +133,8 @@ v2 artifacts are isolated under `.opencode/n8n-v2/`:
 - `plans/`: immutable `V2PlanVersion` files; `source` is `create`, `patch`, or `reverse`.
 - `previews/`: immutable `V2CompiledPreview` files.
 - `registry/workflows.json`: v2 workflow registry records.
-- `claims/`, `runs/`, and `exports/`: reserved v2 paths for future opt-in capabilities.
+- `runs/`: immutable `V2TrialRunArtifact` dry-run records.
+- `claims/` and `exports/`: reserved v2 paths for future opt-in capabilities.
 
 The v1 `.opencode/n8n-workflows.json` and `.opencode/n8n-update-previews/`
 locations are not read as v2 ownership.
@@ -142,6 +154,8 @@ Known v2 codes include:
 - `V2_CLAIM_CONFIRM_REQUIRED`
 - `V2_WORKFLOW_NOT_CLAIMED`
 - `V2_REGISTRY_BASE_URL_MISMATCH`
+- `V2_TRIAL_CONFIRM_REQUIRED`
+- `V2_TRIAL_SAMPLE_NOT_FOUND`
 
 Consumers should branch on `code` and treat `details` as diagnostic context,
 not as a stable exhaustive schema.

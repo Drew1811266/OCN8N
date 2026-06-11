@@ -123,3 +123,20 @@
 写操作：写 `.opencode/n8n-v2/plans/` 和更新 v2 registry 的 latest plan metadata；不写 n8n。
 
 安全限制：base URL mismatch 会阻断；active workflow reverse planning 只读。
+
+## `n8n_v2_run_trial`
+
+用途：对 compiled preview 执行 v2 dry-run trial。
+
+参数：
+
+- `previewId`：必填。
+- `mode`：必须是 `dry_run`。
+- `confirm`：必须为 `true`。
+- `sampleName`：可选，必须匹配 plan test contract 中已有样例名称。
+
+行为：读取 immutable preview 和对应 plan version，重新运行本地 validation/simulation，按可选样例名称检查 sample coverage，返回 `runId`、status、warnings、`triggered: false`、`executionMode: "not_triggered"` 和 `cleanupRequired: false`。
+
+写操作：写 `.opencode/n8n-v2/runs/<runId>.json`；不写 n8n。
+
+安全限制：不会调用 n8n trigger endpoint，不创建临时 workflow，不激活 workflow，不调用外部 API，也不采样 execution history。

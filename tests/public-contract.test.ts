@@ -32,7 +32,12 @@ import type {
   V2ReversePlanResult,
   V2ReverseUnmappedNode,
   V2ReviewPlanArgs,
+  V2RunTrialArgs,
+  V2RunTrialResult,
   V2SimulationResult,
+  V2TrialExecutionMode,
+  V2TrialRunArtifact,
+  V2TrialRunMode,
   V2ValidateSimulateArgs,
   Warning,
 } from "../src/index.js"
@@ -229,6 +234,12 @@ describe("public package contract exports", () => {
       warnings: [],
       createdAt: "2026-06-11T00:00:00.000Z",
     }
+    const runTrialArgs: V2RunTrialArgs = {
+      previewId: previewArtifact.previewId,
+      mode: "dry_run",
+      confirm: true,
+      sampleName: "valid order",
+    }
     const compileResult: V2CompilePreviewResult = {
       previewId: previewArtifact.previewId,
       planId: version.planId,
@@ -255,6 +266,41 @@ describe("public package contract exports", () => {
       simulation,
       mappingTrace: [mappingTrace],
       warnings: [],
+    }
+    const trialMode: V2TrialRunMode = "dry_run"
+    const trialExecutionMode: V2TrialExecutionMode = "not_triggered"
+    const trialArtifact: V2TrialRunArtifact = {
+      runId: "123e4567-e89b-12d3-a456-426614174000",
+      mode: trialMode,
+      previewId: previewArtifact.previewId,
+      planId: version.planId,
+      planVersion: version.planVersion,
+      workflowHash: previewArtifact.workflowHash,
+      status: "passed",
+      triggered: false,
+      executionMode: trialExecutionMode,
+      cleanupRequired: false,
+      simulation,
+      sampleName: "valid order",
+      warnings: [],
+      provenance: ["Dry-run trial re-ran local simulation."],
+      startedAt: "2026-06-11T00:00:00.000Z",
+      completedAt: "2026-06-11T00:00:00.000Z",
+      summary: "Dry-run trial passed.",
+    }
+    const runTrialResult: V2RunTrialResult = {
+      runId: trialArtifact.runId,
+      mode: trialMode,
+      previewId: previewArtifact.previewId,
+      planId: version.planId,
+      planVersion: version.planVersion,
+      status: "passed",
+      triggered: false,
+      executionMode: trialExecutionMode,
+      cleanupRequired: false,
+      sampleName: "valid order",
+      warnings: [],
+      summary: trialArtifact.summary,
     }
     const applyResult: V2ApplyResult = {
       workflowId: "wf_1",
@@ -357,6 +403,11 @@ describe("public package contract exports", () => {
       compileResult,
       autoPreviewResult,
       applyResult,
+      runTrialArgs,
+      trialMode,
+      trialExecutionMode,
+      trialArtifact,
+      runTrialResult,
       claimAction,
       claimRiskCode,
       claimRisk,

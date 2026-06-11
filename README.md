@@ -28,6 +28,7 @@ v2.0 是破坏性重置：
 - `n8n_v2_apply`
 - `n8n_v2_claim_workflow`
 - `n8n_v2_reverse_plan`
+- `n8n_v2_run_trial`
 
 ## 文档索引
 
@@ -196,6 +197,7 @@ v1.0.0 是稳定契约 release candidate，不代表发布到 npm 或创建 Git 
 - 支持便利链路：`n8n_v2_auto_preview` 一次性完成 plan、review、validate/simulate 和 compile preview，不写 n8n。
 - 支持 inactive workflow full claim，以及 active workflow read-only claim。
 - 支持 `n8n_v2_reverse_plan` 从 v2-claimed workflow 生成 `source: "reverse"` 的 plan artifact，并报告 unmapped nodes、inferred external contracts 和 credential uncertainty。
+- 支持 `n8n_v2_run_trial` 对 compiled preview 执行 confirm-gated dry-run trial：只重新运行本地 validation/simulation，写入 `.opencode/n8n-v2/runs/`，不触发 n8n 或外部 API。
 - v2 ownership、registry、preview 和 plan artifact 均与 v1 分离；不会 silent migration。
 
 ## 当前暂不支持

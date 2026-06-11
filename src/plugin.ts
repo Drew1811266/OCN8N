@@ -9,10 +9,12 @@ import { createV2Plan } from "./tools/v2-create-plan.js"
 import { patchV2PlanTool } from "./tools/v2-patch-plan.js"
 import { reverseV2WorkflowPlan } from "./tools/v2-reverse-plan.js"
 import { reviewV2PlanTool } from "./tools/v2-review-plan.js"
+import { runV2Trial } from "./tools/v2-run-trial.js"
 import { validateSimulateV2Plan } from "./tools/v2-validate-simulate.js"
 import { V2PlanStore } from "./v2/plan-store.js"
 import { V2PreviewStore } from "./v2/preview-store.js"
 import { V2WorkflowRegistry } from "./v2/registry.js"
+import { V2RunStore } from "./v2/run-store.js"
 
 export type N8nBuilderPluginOptions = {
   version?: string
@@ -44,6 +46,7 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
         config,
         v2PlanStore: new V2PlanStore(config.v2.plansDir),
         v2PreviewStore: new V2PreviewStore(config.v2.previewsDir),
+        v2RunStore: new V2RunStore(config.v2.runsDir),
       }
     }
 
@@ -245,6 +248,28 @@ export function createN8nBuilderPlugin(options: N8nBuilderPluginOptions = {}): P
             })
 
             return jsonOutput("v2 n8n workflow reverse plan", result)
+          },
+        }),
+
+        n8n_v2_run_trial: tool({
+          description:
+            "Run a confirm-gated v2 dry-run trial by re-running local validation and simulation for a compiled preview without triggering n8n.",
+          args: {
+            previewId: tool.schema.string().min(1),
+            mode: tool.schema.enum(["dry_run"]),
+            confirm: tool.schema.boolean(),
+            sampleName: tool.schema.string().optional(),
+          },
+          async execute(args) {
+            const resolved = await localDeps()
+            const result = await runV2Trial({
+              args,
+              planStore: resolved.v2PlanStore,
+              previewStore: resolved.v2PreviewStore,
+              runStore: resolved.v2RunStore,
+            })
+
+            return jsonOutput("v2 n8n workflow dry-run trial", result)
           },
         }),
       },

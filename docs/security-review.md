@@ -8,7 +8,7 @@ Scope: v2.0 public contract reset for `opencode-n8n-builder`.
 
 ### No silent n8n writes
 
-`n8n_v2_auto_preview`, `n8n_v2_create_plan`, `n8n_v2_review_plan`, `n8n_v2_patch_plan`, `n8n_v2_validate_simulate`, `n8n_v2_compile_preview`, and `n8n_v2_reverse_plan` do not write to n8n. `n8n_v2_apply` requires `confirm: true` and creates a new inactive workflow from a validated compiled preview. `n8n_v2_claim_workflow` requires `confirm: true` for apply.
+`n8n_v2_auto_preview`, `n8n_v2_create_plan`, `n8n_v2_review_plan`, `n8n_v2_patch_plan`, `n8n_v2_validate_simulate`, `n8n_v2_compile_preview`, `n8n_v2_reverse_plan`, and `n8n_v2_run_trial` do not write to n8n. `n8n_v2_apply` requires `confirm: true` and creates a new inactive workflow from a validated compiled preview. `n8n_v2_claim_workflow` requires `confirm: true` for apply.
 
 ### No active workflow structural apply
 
@@ -28,7 +28,7 @@ v2.0 public tools do not sample execution history. Any future sampling must be e
 
 ### No trial run without opt-in
 
-v2.0 public tools do not trigger trial runs or real external API calls. Any future `n8n_v2_run_trial` path must be explicit opt-in and test-environment oriented.
+`n8n_v2_run_trial` requires `confirm: true` and supports only `mode: "dry_run"`. It re-runs local validation/simulation, writes a local run artifact, and does not trigger n8n, create temporary workflows, activate workflows, call external APIs, or sample execution history. Any future real execution trial path must be separately explicit opt-in and test-environment oriented.
 
 ### Claim/import requires explicit intent
 
@@ -61,7 +61,7 @@ n8n API details and persisted plan/preview artifacts use redaction for secret-lo
 - OAuth credential completion remains user/manual in n8n UI.
 - `npm pack --dry-run` must run in an environment with npm before publishing.
 - GitHub workflow files require a token with `workflow` scope before branches containing `.github/workflows/check.yml` can be pushed.
-- Opt-in trial runs remain a target capability, not part of this public reset stage.
+- Real n8n execution trials remain a target capability; current trial support is dry-run only.
 
 ## Decision
 

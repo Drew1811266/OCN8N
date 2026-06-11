@@ -91,6 +91,7 @@ describe("plugin exports", () => {
       "n8n_v2_apply",
       "n8n_v2_claim_workflow",
       "n8n_v2_reverse_plan",
+      "n8n_v2_run_trial",
     ])
     expect(result.tool?.n8n_build_workflow).toBeUndefined()
     expect(result.tool?.n8n_update_workflow).toBeUndefined()
@@ -107,6 +108,7 @@ describe("plugin exports", () => {
     expect(Object.keys(result.tool?.n8n_v2_apply.args ?? {})).toEqual(["previewId", "confirm"])
     expect(Object.keys(result.tool?.n8n_v2_claim_workflow.args ?? {})).toEqual(["workflowId", "mode", "confirm"])
     expect(Object.keys(result.tool?.n8n_v2_reverse_plan.args ?? {})).toEqual(["workflowId"])
+    expect(Object.keys(result.tool?.n8n_v2_run_trial.args ?? {})).toEqual(["previewId", "mode", "confirm", "sampleName"])
   })
 
   it("logs the default v2 version during initialization", async () => {
@@ -212,6 +214,27 @@ describe("plugin exports", () => {
       )
       expect(compiled.previewId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      )
+
+      const trial = parseToolOutput(
+        await result.tool?.n8n_v2_run_trial.execute(
+          {
+            previewId: compiled.previewId,
+            mode: "dry_run",
+            confirm: true,
+            sampleName: "valid order",
+          },
+          {} as never,
+        ),
+      ) as { previewId: string; mode: string; status: string; triggered: boolean; executionMode: string }
+      expect(trial).toEqual(
+        expect.objectContaining({
+          previewId: compiled.previewId,
+          mode: "dry_run",
+          status: "passed",
+          triggered: false,
+          executionMode: "not_triggered",
+        }),
       )
 
       const autoPreview = parseToolOutput(
