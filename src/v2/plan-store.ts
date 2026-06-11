@@ -114,14 +114,33 @@ export class V2PlanStore {
   }
 
   private async writeVersion(version: V2PlanVersion): Promise<V2PlanVersion> {
-    await mkdir(path.dirname(this.versionPath(version.planId, version.planVersion)), { recursive: true })
-    await writeFile(
-      this.versionPath(version.planId, version.planVersion),
-      `${JSON.stringify(version, null, 2)}\n`,
-      "utf8",
-    )
+    const plan = sanitizePlan(version.plan)
+    const persistedVersion: V2PlanVersion = {
+      ...version,
+      plan,
+      summary: sanitizeSummary(version.summary),
+      contentHash: stableHash(plan),
+    }
+    const filePath = this.versionPath(version.planId, version.planVersion)
 
-    return version
+    await mkdir(path.dirname(filePath), { recursive: true })
+    try {
+      await writeFile(filePath, `${JSON.stringify(persistedVersion, null, 2)}\n`, {
+        encoding: "utf8",
+        flag: "wx",
+      })
+    } catch (error) {
+      if (isNodeError(error) && error.code === "EEXIST") {
+        throw new N8nBuilderError("V2 plan version already exists.", "V2_PLAN_VERSION_EXISTS", {
+          planId: version.planId,
+          planVersion: version.planVersion,
+        })
+      }
+
+      throw error
+    }
+
+    return persistedVersion
   }
 
   private versionPath(planId: string, planVersion: number): string {
@@ -131,6 +150,15 @@ export class V2PlanStore {
 
 function sanitizePlan(plan: V2Plan): V2Plan {
   return redactSecrets(plan) as V2Plan
+}
+
+function sanitizeSummary(summary: string): string {
+  const redacted = redactSecrets(summary)
+  return typeof redacted === "string" ? redacted : "[REDACTED]"
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error
 }
 
 function isSafePlanId(planId: string): boolean {

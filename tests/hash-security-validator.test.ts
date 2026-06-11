@@ -102,6 +102,16 @@ describe("security checks", () => {
       errors: ["[REDACTED]", "[REDACTED]", "plain message"],
     })
   })
+
+  it("redacts key-value secret-looking strings", () => {
+    expect(
+      redactSecrets({
+        messages: ["token=secret-token", "password: secret-password", "plain message"],
+      }),
+    ).toEqual({
+      messages: ["[REDACTED]", "[REDACTED]", "plain message"],
+    })
+  })
 })
 
 describe("validateWorkflowForSave", () => {

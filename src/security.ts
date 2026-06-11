@@ -9,6 +9,8 @@ const SECRET_KEYS = new Set([
   "refreshtoken",
 ])
 const redactedValue = "[REDACTED]"
+const secretAssignmentPattern =
+  /\b(?:token|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization)\s*[:=]\s*\S+/i
 
 export function containsPlaintextSecret(value: unknown): boolean {
   return scanValue(value)
@@ -102,7 +104,11 @@ function redactValue(value: unknown, key: string | undefined): unknown {
 }
 
 function isSecretString(value: string): boolean {
-  return /\bBearer\s+[A-Za-z0-9._~+/=:-]+/i.test(value) || /\bxox[baprs]-[A-Za-z0-9-]+/i.test(value)
+  return (
+    /\bBearer\s+[A-Za-z0-9._~+/=:-]+/i.test(value) ||
+    /\bxox[baprs]-[A-Za-z0-9-]+/i.test(value) ||
+    secretAssignmentPattern.test(value)
+  )
 }
 
 function hasPlaintextString(value: unknown): boolean {

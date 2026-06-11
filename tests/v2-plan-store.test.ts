@@ -163,13 +163,27 @@ describe("V2PlanStore", () => {
     const saved = await store.saveInitial({
       plan: sensitivePlan,
       createdAt: "2026-06-11T00:00:00.000Z",
-      summary: "Plan with sensitive sample",
+      summary: "Plan with Authorization: Bearer summary-secret",
+    })
+    const patched = await store.saveNext({
+      planId: saved.planId,
+      parentPlanVersion: saved.planVersion,
+      plan: plan({ trace: ["Patch token=trace-secret"] }),
+      createdAt: "2026-06-11T00:05:00.000Z",
+      summary: "Patch with token=patch-secret",
     })
 
     expect(saved.contentHash).toBe(stableHash(saved.plan))
+    expect(saved.summary).toBe("[REDACTED]")
+    expect(patched.summary).toBe("[REDACTED]")
     const raw = await readFile(path.join(plansDir(), saved.planId, "v1.json"), "utf8")
+    const rawPatch = await readFile(path.join(plansDir(), saved.planId, "v2.json"), "utf8")
     expect(raw).not.toContain("secret-token")
+    expect(raw).not.toContain("summary-secret")
+    expect(rawPatch).not.toContain("trace-secret")
+    expect(rawPatch).not.toContain("patch-secret")
     expect(raw).toContain("[REDACTED]")
+    expect(rawPatch).toContain("[REDACTED]")
   })
 
   it("rejects unsafe saveNext IDs before writing outside the plans directory", async () => {
@@ -239,6 +253,69 @@ describe("V2PlanStore", () => {
       }),
     ).rejects.toMatchObject({ code: "V2_PLAN_INVALID" })
     expect(await store.latest(first.planId)).toEqual(second)
+    expect(await pathExists(path.join(plansDir(), first.planId, "v3.json"))).toBe(false)
+  })
+
+  it("does not overwrite an existing corrupt next version file", async () => {
+    const store = new V2PlanStore(plansDir())
+    const first = await store.saveInitial({
+      plan: plan(),
+      createdAt: "2026-06-11T00:00:00.000Z",
+      summary: "Initial webhook plan",
+    })
+    const corruptPath = path.join(plansDir(), first.planId, "v2.json")
+    await writeFile(corruptPath, "not json\n", "utf8")
+
+    await expect(
+      store.saveNext({
+        planId: first.planId,
+        parentPlanVersion: first.planVersion,
+        plan: plan({ trace: ["Attempted overwrite."] }),
+        createdAt: "2026-06-11T00:05:00.000Z",
+        summary: "Patch should not overwrite",
+      }),
+    ).rejects.toMatchObject({ code: "V2_PLAN_VERSION_EXISTS" })
+
+    expect(await readFile(corruptPath, "utf8")).toBe("not json\n")
+    expect(await store.latest(first.planId)).toEqual(first)
+  })
+
+  it("allows only one concurrent saveNext call from the same parent", async () => {
+    const store = new V2PlanStore(plansDir())
+    const first = await store.saveInitial({
+      plan: plan(),
+      createdAt: "2026-06-11T00:00:00.000Z",
+      summary: "Initial webhook plan",
+    })
+
+    const results = await Promise.allSettled([
+      store.saveNext({
+        planId: first.planId,
+        parentPlanVersion: first.planVersion,
+        plan: plan({ trace: ["Patch A."] }),
+        createdAt: "2026-06-11T00:05:00.000Z",
+        summary: "Patch A",
+      }),
+      store.saveNext({
+        planId: first.planId,
+        parentPlanVersion: first.planVersion,
+        plan: plan({ trace: ["Patch B."] }),
+        createdAt: "2026-06-11T00:06:00.000Z",
+        summary: "Patch B",
+      }),
+    ])
+    const fulfilled = results.filter(
+      (result): result is PromiseFulfilledResult<V2PlanVersion> => result.status === "fulfilled",
+    )
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected")
+
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]?.reason).toMatchObject({
+      code: expect.stringMatching(/^V2_PLAN_(INVALID|VERSION_EXISTS)$/),
+    })
+    expect(fulfilled[0]?.value.planVersion).toBe(2)
+    expect(await store.latest(first.planId)).toEqual(fulfilled[0]?.value)
     expect(await pathExists(path.join(plansDir(), first.planId, "v3.json"))).toBe(false)
   })
 
