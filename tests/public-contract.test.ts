@@ -1,34 +1,21 @@
+import { readFile } from "node:fs/promises"
 import { describe, expect, it } from "vitest"
 import type {
-  BuildWorkflowArgs,
-  BuildWorkflowResult,
-  CheckWorkflowReadinessArgs,
-  CheckWorkflowReadinessResult,
-  ClaimWorkflowArgs,
-  ClaimWorkflowResult,
-  CredentialSetupAction,
-  InspectWorkflowArgs,
-  InspectWorkflowResult,
-  ListManagedWorkflowsResult,
   N8nWorkflow,
-  RuntimeDiagnostics,
-  UpdatePreview,
-  UpdateWorkflowArgs,
-  UpdateWorkflowResult,
   V2ArtifactPaths,
   V2ApplyArgs,
   V2ApplyResult,
   V2AutoPreviewArgs,
   V2AutoPreviewResult,
-  V2CompiledPreview,
-  V2CompilePreviewArgs,
-  V2CompilePreviewResult,
   V2ClaimedWorkflowSummary,
   V2ClaimWorkflowAction,
   V2ClaimWorkflowArgs,
   V2ClaimWorkflowResult,
   V2ClaimWorkflowRisk,
   V2ClaimWorkflowRiskCode,
+  V2CompiledPreview,
+  V2CompilePreviewArgs,
+  V2CompilePreviewResult,
   V2CreatePlanArgs,
   V2CreatePlanResult,
   V2PatchPlanArgs,
@@ -48,8 +35,6 @@ import type {
   V2SimulationResult,
   V2ValidateSimulateArgs,
   Warning,
-  WorkflowDiff,
-  WorkflowRegistryRecord,
 } from "../src/index.js"
 import { createN8nBuilderPlugin, N8nBuilderPlugin } from "../src/index.js"
 
@@ -59,76 +44,14 @@ describe("public package contract exports", () => {
     expect(typeof N8nBuilderPlugin).toBe("function")
   })
 
-  it("exports public tool and artifact types", () => {
-    const buildArgs: BuildWorkflowArgs = { prompt: "Create a manual workflow" }
-    const buildResult: Pick<BuildWorkflowResult, "workflowId" | "name" | "nodeCount"> = {
-      workflowId: "wf_1",
-      name: "Manual",
-      nodeCount: 1,
-    }
-    const updateArgs: UpdateWorkflowArgs = { workflowId: "wf_1", mode: "preview", prompt: "Add a field" }
-    const updateResult: Pick<UpdateWorkflowResult, "workflowId" | "mode" | "warnings"> = {
-      workflowId: "wf_1",
-      mode: "preview",
-      warnings: [],
-    }
-    const claimArgs: ClaimWorkflowArgs = { workflowId: "wf_1", mode: "preview" }
-    const claimResult: Pick<ClaimWorkflowResult, "workflowId" | "mode" | "eligible"> = {
-      workflowId: "wf_1",
-      mode: "preview",
-      eligible: true,
-    }
-    const readinessArgs: CheckWorkflowReadinessArgs = { workflowId: "wf_1", mode: "preview" }
-    const diagnostics: RuntimeDiagnostics = { supported: false, executions: [] }
-    const readinessResult: Pick<CheckWorkflowReadinessResult, "workflowId" | "mode" | "diagnostics"> = {
-      workflowId: "wf_1",
-      mode: "preview",
-      diagnostics,
-    }
-    const inspectArgs: InspectWorkflowArgs = { workflowId: "wf_1" }
-    const inspectResult: Pick<InspectWorkflowResult, "workflowId" | "nodes"> = {
-      workflowId: "wf_1",
-      nodes: [],
-    }
-    const listResult: ListManagedWorkflowsResult = { workflows: [] }
-    const credentialAction: CredentialSetupAction = {
-      nodeName: "Slack",
-      credentialType: "slackApi",
-      action: "configure_mapping",
-      status: "required",
-      message: "Configure credential mapping.",
-    }
-    const warning: Warning = { code: "NODE_COMPATIBILITY_DYNAMIC", message: "Dynamic node." }
+  it("exports v2 public tool and artifact types", () => {
+    const warning: Warning = { code: "V2_WARNING", message: "Review required." }
     const workflow: N8nWorkflow = {
-      name: "Manual",
+      name: "Orders",
       active: false,
       nodes: [],
       connections: {},
       settings: {},
-    }
-    const diff: WorkflowDiff = {
-      addedNodes: [],
-      removedNodes: [],
-      changedNodeParameters: [],
-      changedCredentials: [],
-      changedConnections: [],
-      changedSettings: [],
-    }
-    const registry: WorkflowRegistryRecord = {
-      workflowId: "wf_1",
-      name: "Manual",
-      url: "https://demo/workflow/wf_1",
-      baseUrl: "https://demo/api/v1",
-      managedBy: "opencode-n8n-builder",
-      managedByVersion: "1.0.0",
-      lastPlanHash: "hash",
-      lastUpdatedAt: "2026-06-10T00:00:00.000Z",
-    }
-    const preview: Pick<UpdatePreview, "workflowId" | "baseWorkflow" | "proposedWorkflow" | "diff"> = {
-      workflowId: "wf_1",
-      baseWorkflow: workflow,
-      proposedWorkflow: workflow,
-      diff,
     }
     const v2Paths: V2ArtifactPaths = {
       rootDir: "/tmp/project/.opencode/n8n-v2",
@@ -140,60 +63,6 @@ describe("public package contract exports", () => {
       runsDir: "/tmp/project/.opencode/n8n-v2/runs",
       exportsDir: "/tmp/project/.opencode/n8n-v2/exports",
     }
-    const reverseArgs: V2ReversePlanArgs = { workflowId: "wf_1" }
-    const unmappedNode: V2ReverseUnmappedNode = {
-      name: "Community Node",
-      type: "n8n-nodes-base.communityNode",
-      reason: "unsupported_node_type",
-    }
-    const reverseResult: Pick<
-      V2ReversePlanResult,
-      | "workflowId"
-      | "planId"
-      | "planVersion"
-      | "source"
-      | "confidence"
-      | "riskLevel"
-      | "mappedStepCount"
-      | "unmappedNodes"
-      | "warnings"
-    > = {
-      workflowId: "wf_1",
-      planId: "123e4567-e89b-12d3-a456-426614174000",
-      planVersion: 1,
-      source: "reverse",
-      confidence: "low",
-      riskLevel: "medium",
-      mappedStepCount: 1,
-      unmappedNodes: [unmappedNode],
-      warnings: [],
-    }
-
-    expect({
-      buildArgs,
-      buildResult,
-      updateArgs,
-      updateResult,
-      claimArgs,
-      claimResult,
-      readinessArgs,
-      readinessResult,
-      inspectArgs,
-      inspectResult,
-      listResult,
-      credentialAction,
-      warning,
-      workflow,
-      diff,
-      registry,
-      preview,
-      v2Paths,
-      reverseArgs,
-      reverseResult,
-    }).toBeDefined()
-  })
-
-  it("exports v2 plan artifact contract types", () => {
     const createArgs: V2CreatePlanArgs = {
       prompt: "Receive order payloads and return an acknowledgement.",
       name: "Orders",
@@ -333,6 +202,7 @@ describe("public package contract exports", () => {
       mode: "apply",
       confirm: true,
     }
+    const reverseArgs: V2ReversePlanArgs = { workflowId: "wf_1" }
     const mappingTrace: V2PreviewMappingTrace = {
       stepId: "step_receive",
       patternIds: ["pattern_trigger_1"],
@@ -348,18 +218,11 @@ describe("public package contract exports", () => {
       sampleResults: [],
       fieldTraces: [],
     }
-    const previewWorkflow: N8nWorkflow = {
-      name: "Orders",
-      active: false,
-      nodes: [],
-      connections: {},
-      settings: {},
-    }
     const previewArtifact: V2CompiledPreview = {
       previewId: "123e4567-e89b-12d3-a456-426614174000",
       planId: version.planId,
       planVersion: version.planVersion,
-      workflow: previewWorkflow,
+      workflow,
       workflowHash: "workflow_hash",
       mappingTrace: [mappingTrace],
       validationStatus: "passed",
@@ -370,8 +233,8 @@ describe("public package contract exports", () => {
       previewId: previewArtifact.previewId,
       planId: version.planId,
       planVersion: version.planVersion,
-      workflowName: previewWorkflow.name,
-      nodeCount: previewWorkflow.nodes.length,
+      workflowName: workflow.name,
+      nodeCount: workflow.nodes.length,
       workflowHash: previewArtifact.workflowHash,
       validationStatus: "passed",
       mappingTrace: [mappingTrace],
@@ -382,8 +245,8 @@ describe("public package contract exports", () => {
       planVersion: version.planVersion,
       summary: "Created v2 plan for: Receive order payloads and return an acknowledgement.",
       previewId: previewArtifact.previewId,
-      workflowName: previewWorkflow.name,
-      nodeCount: previewWorkflow.nodes.length,
+      workflowName: workflow.name,
+      nodeCount: workflow.nodes.length,
       workflowHash: previewArtifact.workflowHash,
       validationStatus: "passed",
       confidence: "high",
@@ -401,7 +264,7 @@ describe("public package contract exports", () => {
       previewId: previewArtifact.previewId,
       planId: version.planId,
       planVersion: version.planVersion,
-      nodeCount: previewWorkflow.nodes.length,
+      nodeCount: workflow.nodes.length,
       workflowHash: "created_workflow_hash",
       validationStatus: "passed",
       warnings: [],
@@ -433,6 +296,25 @@ describe("public package contract exports", () => {
       registryWritten: true,
       workflowHash: "workflow_hash",
     }
+    const unmappedNode: V2ReverseUnmappedNode = {
+      name: "Community Node",
+      type: "n8n-nodes-base.communityNode",
+      reason: "unsupported_node_type",
+    }
+    const reverseResult: V2ReversePlanResult = {
+      workflowId: "wf_1",
+      name: "Orders",
+      url: "https://demo/workflow/wf_1",
+      planId: version.planId,
+      planVersion: version.planVersion,
+      source: "reverse",
+      confidence: "low",
+      riskLevel: "medium",
+      mappedStepCount: 1,
+      unmappedNodes: [unmappedNode],
+      warnings: [],
+      workflowHash: "workflow_hash",
+    }
     const registry: V2RegistryRecord = {
       workflowId: "wf_1",
       name: "Orders",
@@ -449,6 +331,9 @@ describe("public package contract exports", () => {
     }
 
     expect({
+      warning,
+      workflow,
+      v2Paths,
       createArgs,
       autoPreviewArgs,
       createResult,
@@ -465,9 +350,9 @@ describe("public package contract exports", () => {
       compileArgs,
       applyArgs,
       claimArgs,
+      reverseArgs,
       mappingTrace,
       simulation,
-      previewWorkflow,
       previewArtifact,
       compileResult,
       autoPreviewResult,
@@ -477,7 +362,27 @@ describe("public package contract exports", () => {
       claimRisk,
       claimedSummary,
       claimResult,
+      unmappedNode,
+      reverseResult,
       registry,
     }).toBeDefined()
+  })
+
+  it("does not expose v1 tool types from the package barrel", async () => {
+    const indexSource = await readFile("src/index.ts", "utf8")
+
+    for (const removedExport of [
+      "./tools/build-workflow.js",
+      "./tools/update-workflow.js",
+      "./tools/claim-workflow.js",
+      "./tools/check-workflow-readiness.js",
+      "./tools/inspect-workflow.js",
+      "./tools/list-managed-workflows.js",
+      "./preview-store.js",
+      "./registry.js",
+      "./workflow-diff.js",
+    ]) {
+      expect(indexSource).not.toContain(removedExport)
+    }
   })
 })

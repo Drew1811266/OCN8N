@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
+import { mkdtemp } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { PluginInput } from "@opencode-ai/plugin"
@@ -76,18 +76,12 @@ describe("plugin exports", () => {
     expect(typeof N8nBuilderPlugin).toBe("function")
   })
 
-  it("registers v1 tools and v2 foundation tools", async () => {
-    const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
+  it("registers v2 public tools only", async () => {
+    const plugin = createN8nBuilderPlugin()
 
     const result = await plugin(mockPluginInput())
 
     expect(Object.keys(result.tool ?? {})).toEqual([
-      "n8n_build_workflow",
-      "n8n_update_workflow",
-      "n8n_claim_workflow",
-      "n8n_check_workflow_readiness",
-      "n8n_inspect_workflow",
-      "n8n_list_managed_workflows",
       "n8n_v2_auto_preview",
       "n8n_v2_create_plan",
       "n8n_v2_review_plan",
@@ -98,21 +92,12 @@ describe("plugin exports", () => {
       "n8n_v2_claim_workflow",
       "n8n_v2_reverse_plan",
     ])
-    expect(Object.keys(result.tool?.n8n_build_workflow.args ?? {})).toEqual(["prompt", "name"])
-    expect(Object.keys(result.tool?.n8n_update_workflow.args ?? {})).toEqual(["workflowId", "prompt", "mode", "previewId"])
-    expect((result.tool?.n8n_update_workflow.args.mode as { options?: string[] } | undefined)?.options).toEqual([
-      "preview",
-      "apply",
-      "rollback-preview",
-      "rollback-apply",
-    ])
-    expect(Object.keys(result.tool?.n8n_claim_workflow.args ?? {})).toEqual(["workflowId", "mode", "confirm"])
-    expect(Object.keys(result.tool?.n8n_check_workflow_readiness.args ?? {})).toEqual([
-      "workflowId",
-      "mode",
-      "confirm",
-      "allowWarnings",
-    ])
+    expect(result.tool?.n8n_build_workflow).toBeUndefined()
+    expect(result.tool?.n8n_update_workflow).toBeUndefined()
+    expect(result.tool?.n8n_claim_workflow).toBeUndefined()
+    expect(result.tool?.n8n_check_workflow_readiness).toBeUndefined()
+    expect(result.tool?.n8n_inspect_workflow).toBeUndefined()
+    expect(result.tool?.n8n_list_managed_workflows).toBeUndefined()
     expect(Object.keys(result.tool?.n8n_v2_auto_preview.args ?? {})).toEqual(["prompt", "name"])
     expect(Object.keys(result.tool?.n8n_v2_create_plan.args ?? {})).toEqual(["prompt", "name"])
     expect(Object.keys(result.tool?.n8n_v2_review_plan.args ?? {})).toEqual(["planId", "planVersion"])
@@ -124,37 +109,28 @@ describe("plugin exports", () => {
     expect(Object.keys(result.tool?.n8n_v2_reverse_plan.args ?? {})).toEqual(["workflowId"])
   })
 
-  it("routes rollback update modes without requiring MCP configuration", async () => {
-    await withoutN8nEnv(async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
-      const plugin = createN8nBuilderPlugin({ version: "0.7.0" })
-      const result = await plugin(
-        mockPluginInput({
-          directory,
-          opencodeConfig: {
-            n8n: {
-              baseUrl: "https://demo/api/v1",
-              apiKey: "key",
-            },
-          },
-        }),
-      )
+  it("logs the default v2 version during initialization", async () => {
+    const log = vi.fn().mockResolvedValue(undefined)
+    const plugin = createN8nBuilderPlugin()
 
-      await expect(
-        result.tool?.n8n_update_workflow.execute({ workflowId: "wf_1", mode: "rollback-preview" }, {} as never),
-      ).rejects.toMatchObject({
-        code: "TOOL_ARGS_INVALID",
-        message: "rollback-preview updates require a previewId.",
-        details: { field: "previewId" },
-      })
+    const result = await plugin(mockPluginInput({ log }))
+
+    expect(log).toHaveBeenCalledWith({
+      body: {
+        service: "opencode-n8n-builder",
+        level: "info",
+        message: "Plugin initialized",
+        extra: { version: "2.0.0" },
+      },
     })
+    expect(result.tool).toEqual(expect.any(Object))
   })
 
-  it("logs the configured version during initialization", async () => {
+  it("logs a configured version override during initialization", async () => {
     const log = vi.fn().mockResolvedValue(undefined)
     const plugin = createN8nBuilderPlugin({ version: "9.9.9" })
 
-    const result = await plugin(mockPluginInput({ log }))
+    await plugin(mockPluginInput({ log }))
 
     expect(log).toHaveBeenCalledWith({
       body: {
@@ -164,47 +140,12 @@ describe("plugin exports", () => {
         extra: { version: "9.9.9" },
       },
     })
-    expect(result.tool).toEqual(expect.any(Object))
-  })
-
-  it("lists managed workflows without n8n API or MCP configuration", async () => {
-    await withoutN8nEnv(async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
-      await mkdir(path.join(directory, ".opencode"), { recursive: true })
-      await writeFile(
-        path.join(directory, ".opencode", "n8n-workflows.json"),
-        `${JSON.stringify({
-          workflows: [
-            {
-              workflowId: "wf_1",
-              name: "Orders",
-              url: "https://demo/workflow/wf_1",
-              baseUrl: "https://demo/api/v1",
-              managedBy: "opencode-n8n-builder",
-              managedByVersion: "0.1.0",
-              lastPlanHash: "hash",
-              lastUpdatedAt: "2026-06-04T00:00:00.000Z",
-            },
-          ],
-        })}\n`,
-        "utf8",
-      )
-
-      const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
-      const result = await plugin(mockPluginInput({ directory, opencodeConfig: {} }))
-
-      await expect(result.tool?.n8n_list_managed_workflows.execute({}, {} as never)).resolves.toEqual(
-        expect.objectContaining({
-          output: expect.stringContaining("wf_1"),
-        }),
-      )
-    })
   })
 
   it("runs v2 local plan tools without n8n API or MCP configuration", async () => {
     await withoutN8nEnv(async () => {
       const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-v2-"))
-      const plugin = createN8nBuilderPlugin({ version: "2.0.0" })
+      const plugin = createN8nBuilderPlugin()
       const result = await plugin(mockPluginInput({ directory, opencodeConfig: {} }))
 
       const created = parseToolOutput(
@@ -294,96 +235,10 @@ describe("plugin exports", () => {
     })
   })
 
-  it("inspects a workflow without requiring MCP configuration", async () => {
-    await withoutN8nEnv(async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
-      await mkdir(path.join(directory, ".opencode"), { recursive: true })
-      await writeFile(
-        path.join(directory, ".opencode", "n8n-workflows.json"),
-        `${JSON.stringify({
-          workflows: [
-            {
-              workflowId: "wf_1",
-              name: "Orders",
-              url: "https://demo/workflow/wf_1",
-              baseUrl: "https://demo/api/v1",
-              managedBy: "opencode-n8n-builder",
-              managedByVersion: "0.1.0",
-              lastPlanHash: "hash",
-              lastUpdatedAt: "2026-06-04T00:00:00.000Z",
-            },
-          ],
-        })}\n`,
-        "utf8",
-      )
-      const originalFetch = globalThis.fetch
-      const fetchMock = vi.fn(async () => {
-        return new Response(
-          JSON.stringify({
-            id: "wf_1",
-            name: "Orders",
-            active: false,
-            nodes: [
-              {
-                name: "Start",
-                type: "n8n-nodes-base.manualTrigger",
-                typeVersion: 1,
-                position: [0, 0],
-                parameters: {},
-              },
-            ],
-            connections: {},
-            settings: {},
-            tags: [{ name: "opencode-n8n-builder" }],
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        )
-      })
-      globalThis.fetch = fetchMock as typeof fetch
-
-      try {
-        const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
-        const result = await plugin(
-          mockPluginInput({
-            directory,
-            opencodeConfig: {
-              n8n: {
-                baseUrl: "https://demo/api/v1",
-                apiKey: "key",
-              },
-            },
-          }),
-        )
-
-        const output = parseToolOutput(
-          await result.tool?.n8n_inspect_workflow.execute({ workflowId: "wf_1" }, {} as never),
-        )
-
-        expect(fetchMock).toHaveBeenCalledWith(
-          "https://demo/api/v1/workflows/wf_1",
-          expect.objectContaining({
-            headers: expect.objectContaining({ "X-N8N-API-KEY": "key" }),
-          }),
-        )
-        expect(output).toEqual(
-          expect.objectContaining({
-            workflowId: "wf_1",
-            name: "Orders",
-          }),
-        )
-      } finally {
-        globalThis.fetch = originalFetch
-      }
-    })
-  })
-
   it("applies a v2 preview through API config without requiring MCP configuration", async () => {
     await withoutN8nEnv(async () => {
       const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-v2-apply-"))
-      const plugin = createN8nBuilderPlugin({ version: "2.0.0" })
+      const plugin = createN8nBuilderPlugin()
       const result = await plugin(
         mockPluginInput({
           directory,
@@ -481,7 +336,7 @@ describe("plugin exports", () => {
       globalThis.fetch = fetchMock as typeof fetch
 
       try {
-        const plugin = createN8nBuilderPlugin({ version: "2.0.0" })
+        const plugin = createN8nBuilderPlugin()
         const result = await plugin(
           mockPluginInput({
             directory,
@@ -565,7 +420,7 @@ describe("plugin exports", () => {
       globalThis.fetch = fetchMock as typeof fetch
 
       try {
-        const plugin = createN8nBuilderPlugin({ version: "2.0.0" })
+        const plugin = createN8nBuilderPlugin()
         const result = await plugin(
           mockPluginInput({
             directory,
@@ -594,395 +449,6 @@ describe("plugin exports", () => {
             mappedStepCount: 2,
             planVersion: 1,
           }),
-        )
-      } finally {
-        globalThis.fetch = originalFetch
-      }
-    })
-  })
-
-  it("routes readiness preview without requiring OpenCode planner configuration", async () => {
-    await withoutN8nEnv(async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
-      await mkdir(path.join(directory, ".opencode"), { recursive: true })
-      await writeFile(
-        path.join(directory, ".opencode", "n8n-workflows.json"),
-        `${JSON.stringify({
-          workflows: [
-            {
-              workflowId: "wf_1",
-              name: "Orders",
-              url: "https://demo/workflow/wf_1",
-              baseUrl: "https://demo/api/v1",
-              managedBy: "opencode-n8n-builder",
-              managedByVersion: "0.8.0",
-              lastPlanHash: "hash",
-              lastUpdatedAt: "2026-06-04T00:00:00.000Z",
-            },
-          ],
-        })}\n`,
-        "utf8",
-      )
-      const originalFetch = globalThis.fetch
-      const fetchMock = vi.fn(async (input: string) => {
-        if (input.includes("/executions")) {
-          return new Response(JSON.stringify({ data: [] }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          })
-        }
-
-        return new Response(
-          JSON.stringify({
-            id: "wf_1",
-            name: "Orders",
-            active: false,
-            nodes: [],
-            connections: {},
-            settings: {},
-            tags: [{ name: "opencode-n8n-builder" }],
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        )
-      })
-      globalThis.fetch = fetchMock as typeof fetch
-
-      try {
-        const plugin = createN8nBuilderPlugin({ version: "0.8.0" })
-        const result = await plugin(
-          mockPluginInput({
-            directory,
-            opencodeConfig: {
-              n8n: {
-                baseUrl: "https://demo/api/v1",
-                apiKey: "key",
-              },
-            },
-          }),
-        )
-
-        const output = parseToolOutput(
-          await result.tool?.n8n_check_workflow_readiness.execute(
-            { workflowId: "wf_1", mode: "preview" },
-            {} as never,
-          ),
-        )
-
-        expect(output).toEqual(
-          expect.objectContaining({
-            workflowId: "wf_1",
-            mode: "preview",
-          }),
-        )
-      } finally {
-        globalThis.fetch = originalFetch
-      }
-    })
-  })
-
-  it("previews workflow claim without requiring MCP configuration", async () => {
-    await withoutN8nEnv(async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
-      const originalFetch = globalThis.fetch
-      const fetchMock = vi.fn(async () => {
-        return new Response(
-          JSON.stringify({
-            id: "wf_1",
-            name: "External Orders",
-            active: false,
-            nodes: [
-              {
-                name: "Manual Trigger",
-                type: "n8n-nodes-base.manualTrigger",
-                typeVersion: 1,
-                position: [0, 0],
-                parameters: {},
-              },
-            ],
-            connections: {},
-            settings: {},
-            tags: [],
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        )
-      })
-      globalThis.fetch = fetchMock as typeof fetch
-
-      try {
-        const plugin = createN8nBuilderPlugin({ version: "0.6.0" })
-        const result = await plugin(
-          mockPluginInput({
-            directory,
-            opencodeConfig: {
-              n8n: {
-                baseUrl: "https://demo/api/v1",
-                apiKey: "key",
-              },
-            },
-          }),
-        )
-
-        const output = parseToolOutput(
-          await result.tool?.n8n_claim_workflow.execute({ workflowId: "wf_1", mode: "preview" }, {} as never),
-        )
-
-        expect(fetchMock).toHaveBeenCalledWith(
-          "https://demo/api/v1/workflows/wf_1",
-          expect.objectContaining({
-            method: "GET",
-            headers: expect.objectContaining({ "X-N8N-API-KEY": "key" }),
-          }),
-        )
-        expect(output).toEqual(
-          expect.objectContaining({
-            workflowId: "wf_1",
-            mode: "preview",
-            eligible: true,
-            action: "claim",
-          }),
-        )
-      } finally {
-        globalThis.fetch = originalFetch
-      }
-    })
-  })
-
-  it("blocks inspect for marker-tagged workflows missing from the local registry", async () => {
-    await withoutN8nEnv(async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
-      const originalFetch = globalThis.fetch
-      const fetchMock = vi.fn(async () => {
-        return new Response(
-          JSON.stringify({
-            id: "wf_1",
-            name: "Orders",
-            active: false,
-            nodes: [
-              {
-                name: "Start",
-                type: "n8n-nodes-base.manualTrigger",
-                typeVersion: 1,
-                position: [0, 0],
-                parameters: {},
-              },
-            ],
-            connections: {},
-            settings: {},
-            tags: [{ name: "opencode-n8n-builder" }],
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        )
-      })
-      globalThis.fetch = fetchMock as typeof fetch
-
-      try {
-        const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
-        const result = await plugin(
-          mockPluginInput({
-            directory,
-            opencodeConfig: {
-              n8n: {
-                baseUrl: "https://demo/api/v1",
-                apiKey: "key",
-              },
-            },
-          }),
-        )
-
-        await expect(
-          result.tool?.n8n_inspect_workflow.execute({ workflowId: "wf_1" }, {} as never),
-        ).rejects.toMatchObject({
-          code: "WORKFLOW_INSPECT_BLOCKED",
-          details: {
-            workflowId: "wf_1",
-            issues: [
-              expect.objectContaining({
-                code: "WORKFLOW_NOT_IN_REGISTRY",
-              }),
-            ],
-          },
-        })
-      } finally {
-        globalThis.fetch = originalFetch
-      }
-    })
-  })
-
-  it("passes configured MCP token to build workflow MCP requests", async () => {
-    await withoutN8nEnv(async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), "ocn8n-plugin-"))
-      const plan = {
-        name: "Manual E2E",
-        summary: "Create a manual trigger with Set output.",
-        nodes: [
-          {
-            key: "manual",
-            name: "Manual Trigger",
-            type: "n8n-nodes-base.manualTrigger",
-            typeVersion: 1,
-            position: [0, 0],
-            parameters: {},
-          },
-          {
-            key: "set",
-            name: "Set Fields",
-            type: "n8n-nodes-base.set",
-            typeVersion: 3,
-            position: [260, 0],
-            parameters: {
-              assignments: {
-                assignments: [
-                  {
-                    id: "message",
-                    name: "message",
-                    type: "string",
-                    value: "created by opencode",
-                  },
-                ],
-              },
-            },
-          },
-        ],
-        connections: [{ from: "manual", to: "set" }],
-      }
-      const session = {
-        create: vi.fn(async () => ({ id: "session_1" })),
-        prompt: vi.fn(async () => ({
-          data: {
-            info: {},
-            parts: [
-              {
-                type: "text",
-                text: JSON.stringify({
-                  plan,
-                  sdkCode: "const workflow = { nodes: [] }",
-                  nodeSelection: [
-                    {
-                      nodeType: "n8n-nodes-base.manualTrigger",
-                      reason: "Starts the workflow manually.",
-                    },
-                    {
-                      nodeType: "n8n-nodes-base.set",
-                      reason: "Creates the requested output field.",
-                    },
-                  ],
-                }),
-              },
-            ],
-          },
-        })),
-      }
-      const originalFetch = globalThis.fetch
-      const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
-        if (input === "https://demo/mcp") {
-          const request = JSON.parse(init?.body as string) as { id: string; params?: { name?: string } }
-          const textByToolName: Record<string, string> = {
-            get_sdk_reference: "SDK docs",
-            search_nodes: "Manual Trigger nodeType=n8n-nodes-base.manualTrigger\nSet nodeType=n8n-nodes-base.set",
-            get_node_types: "Manual Trigger and Set node docs",
-            get_suggested_nodes: "Use Manual Trigger with Set for manual data transformation workflows.",
-            validate_workflow: JSON.stringify({
-              valid: true,
-              nodeCount: 2,
-              warnings: [
-                {
-                  code: "MISSING_DESCRIPTION",
-                  message: "Add description",
-                  nodeName: "Manual Trigger",
-                },
-              ],
-              errors: [],
-            }),
-          }
-          const text = textByToolName[request.params?.name ?? ""] ?? "No node ids."
-
-          return new Response(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: request.id,
-              result: { content: [{ type: "text", text }] },
-            }),
-            { status: 200 },
-          )
-        }
-
-        return new Response(
-          JSON.stringify({
-            id: "wf_1",
-            name: "Manual E2E",
-            active: false,
-            nodes: [],
-            connections: {},
-            settings: {},
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        )
-      })
-      globalThis.fetch = fetchMock as typeof fetch
-
-      try {
-        const plugin = createN8nBuilderPlugin({ version: "0.1.0" })
-        const result = await plugin(
-          mockPluginInput({
-            directory,
-            session,
-            opencodeConfig: {
-              n8n: {
-                baseUrl: "https://demo/api/v1",
-                apiKey: "key",
-                mcpUrl: "https://demo/mcp",
-                mcpToken: "mcp_token",
-              },
-            },
-          }),
-        )
-
-        const output = parseToolOutput(
-          await result.tool?.n8n_build_workflow.execute(
-            { prompt: "Build a manual workflow to set a field" },
-            {} as never,
-          ),
-        )
-        const mcpToolNames = fetchMock.mock.calls
-          .filter(([input]) => input === "https://demo/mcp")
-          .map(([, init]) => {
-            const request = JSON.parse((init as RequestInit | undefined)?.body as string) as {
-              params?: { name?: string }
-            }
-            return request.params?.name
-          })
-
-        expect(fetchMock).toHaveBeenCalledWith(
-          "https://demo/mcp",
-          expect.objectContaining({
-            headers: expect.objectContaining({
-              Authorization: "Bearer mcp_token",
-            }),
-          }),
-        )
-        expect(mcpToolNames).toContain("get_suggested_nodes")
-        expect(mcpToolNames).toContain("validate_workflow")
-        expect(output).toEqual(
-          expect.objectContaining({
-            workflowId: "wf_1",
-            name: "Manual E2E",
-          }),
-        )
-        expect((output as { warnings?: Array<{ code?: string }> }).warnings).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              code: "MCP_MISSING_DESCRIPTION",
-            }),
-          ]),
         )
       } finally {
         globalThis.fetch = originalFetch
