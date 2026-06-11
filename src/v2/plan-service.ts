@@ -1,4 +1,5 @@
 import type { V2Plan, V2PlanReview, V2SimulationResult, V2ValidationIssue, V2Warning } from "./types.js"
+import { createPatternFirstV2Plan } from "./pattern-planner.js"
 
 export type CreateInitialV2PlanInput = {
   prompt: string
@@ -24,88 +25,7 @@ export type ValidateAndSimulateV2PlanInput = {
 }
 
 export function createInitialV2Plan(input: CreateInitialV2PlanInput): V2Plan {
-  const goal = input.prompt.trim()
-
-  return {
-    intent: {
-      goal,
-      scope: [input.name ?? "Generated workflow preview"],
-      nonGoals: ["active workflow structural editing"],
-    },
-    inputs: [
-      {
-        id: "input_webhook",
-        mode: "webhook",
-        schema: { sample: "boolean" },
-        samples: [{ sample: true }],
-      },
-    ],
-    entities: [{ name: "Payload", fields: { sample: "boolean" } }],
-    steps: [
-      {
-        id: "step_trigger",
-        name: "Receive input",
-        summary: "Receive the incoming automation input.",
-        patternIds: ["pattern_trigger"],
-        inputRefs: ["input_webhook"],
-        outputRefs: ["Payload"],
-      },
-      {
-        id: "step_output",
-        name: "Return output",
-        summary: "Return an acknowledgement output.",
-        patternIds: ["pattern_output"],
-        inputRefs: ["Payload"],
-        outputRefs: ["output_response"],
-      },
-    ],
-    patterns: [
-      {
-        id: "pattern_trigger",
-        family: "trigger",
-        variant: "webhook",
-        summary: "Receive an input payload.",
-        confidence: "medium",
-        riskLevel: "low",
-        warnings: [],
-      },
-      {
-        id: "pattern_output",
-        family: "output",
-        variant: "respond_to_webhook",
-        summary: "Return a response to the caller.",
-        confidence: "medium",
-        riskLevel: "low",
-        warnings: [],
-      },
-    ],
-    branches: [],
-    loops: [],
-    externalCalls: [],
-    errorPolicy: { strategy: "fail_fast", notifications: [] },
-    outputs: [
-      {
-        id: "output_response",
-        mode: "respond_to_webhook",
-        contract: { accepted: "boolean" },
-      },
-    ],
-    testContract: {
-      examples: [
-        {
-          name: "default sample",
-          input: { sample: true },
-          expectedOutput: { accepted: true },
-        },
-      ],
-      edgeCases: [],
-    },
-    credentialRequirements: [],
-    confidence: "medium",
-    riskLevel: "low",
-    warnings: [],
-    trace: [`Created foundation v2 plan from prompt: ${goal}`],
-  }
+  return createPatternFirstV2Plan(input)
 }
 
 export function reviewV2Plan(input: ReviewV2PlanInput): V2PlanReview {

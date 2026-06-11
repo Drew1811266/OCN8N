@@ -17,9 +17,9 @@ describe("v2 plan service foundation", () => {
     expect(plan.patterns.map((pattern) => pattern.family)).toEqual(["trigger", "output"])
     expect(plan.testContract.examples).toEqual([
       {
-        name: "default sample",
-        input: { sample: true },
-        expectedOutput: { accepted: true },
+        name: "valid order",
+        input: { orderId: "ord_1", status: "ready", items: [{ sku: "sku_1", quantity: 1 }] },
+        expectedOutput: { accepted: true, status: "queued" },
       },
     ])
     expect(plan.confidence).toBe("medium")
