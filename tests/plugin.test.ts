@@ -212,6 +212,38 @@ describe("plugin exports", () => {
         ),
       ) as { summary: string }
       expect(reviewed.summary).toContain("pattern")
+
+      const patched = parseToolOutput(
+        await result.tool?.n8n_v2_patch_plan.execute(
+          {
+            planId: created.planId,
+            planVersion: created.planVersion,
+            patch: "Add a validation step before the response",
+          },
+          {} as never,
+        ),
+      ) as { planId: string; planVersion: number; parentPlanVersion: number }
+      expect(patched).toEqual(
+        expect.objectContaining({
+          planId: created.planId,
+          planVersion: 2,
+          parentPlanVersion: 1,
+        }),
+      )
+
+      const validated = parseToolOutput(
+        await result.tool?.n8n_v2_validate_simulate.execute(
+          { planId: patched.planId, planVersion: patched.planVersion },
+          {} as never,
+        ),
+      ) as { planId: string; planVersion: number; status: string }
+      expect(validated).toEqual(
+        expect.objectContaining({
+          planId: patched.planId,
+          planVersion: patched.planVersion,
+          status: "passed",
+        }),
+      )
     })
   })
 
