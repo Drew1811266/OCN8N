@@ -65,18 +65,41 @@ describe("compileV2PlanToWorkflowPreview", () => {
 
     expect(compiled.mappingTrace).toEqual(
       expect.arrayContaining([
-        {
+        expect.objectContaining({
           stepId: "step_external_call",
+          businessIntent: "Call the external fulfillment API and parse the response.",
           patternIds: ["pattern_external_http", "pattern_external_auth", "pattern_external_response"],
           nodeNames: ["Call fulfillment API"],
+          nodeParameters: expect.arrayContaining([
+            { nodeName: "Call fulfillment API", path: "method" },
+            { nodeName: "Call fulfillment API", path: "bodyParameters.parameters.0.value" },
+          ]),
+          expressions: [
+            {
+              nodeName: "Call fulfillment API",
+              path: "bodyParameters.parameters.0.value",
+              expression: "={{$json.orderId}}",
+              sourceFields: ["orderId"],
+            },
+          ],
+          sourceFields: expect.arrayContaining(["items", "orderId", "status"]),
+          outputFields: expect.arrayContaining(["fulfillmentId", "status"]),
           notes: ["Compiled external_call pattern(s) into n8n-nodes-base.httpRequest."],
-        },
-        {
+        }),
+        expect.objectContaining({
           stepId: "step_output",
+          businessIntent: "Return, write, or notify the final workflow result.",
           patternIds: ["pattern_output_response", "pattern_output_write", "pattern_output_notification"],
           nodeNames: ["Return output"],
+          nodeParameters: expect.arrayContaining([
+            { nodeName: "Return output", path: "respondWith" },
+            { nodeName: "Return output", path: "responseBody.accepted" },
+          ]),
+          expressions: [],
+          sourceFields: expect.arrayContaining(["fulfillmentId", "status"]),
+          outputFields: expect.arrayContaining(["accepted", "fulfillmentId", "message", "status"]),
           notes: ["Compiled output pattern(s) into n8n-nodes-base.respondToWebhook."],
-        },
+        }),
       ]),
     )
   })

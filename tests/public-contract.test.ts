@@ -223,8 +223,13 @@ describe("public package contract exports", () => {
     const reverseArgs: V2ReversePlanArgs = { workflowId: "wf_1" }
     const mappingTrace: V2PreviewMappingTrace = {
       stepId: "step_receive",
+      businessIntent: "Accept order input.",
       patternIds: ["pattern_trigger_1"],
       nodeNames: ["Receive order"],
+      nodeParameters: [{ nodeName: "Receive order", path: "path" }],
+      expressions: [],
+      sourceFields: ["orderId"],
+      outputFields: ["accepted"],
       notes: ["Compiled trigger pattern."],
     }
     const simulation: V2SimulationResult = {

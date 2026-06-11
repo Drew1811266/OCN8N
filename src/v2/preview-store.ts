@@ -7,10 +7,27 @@ import { redactSecrets } from "../security.js"
 import type { N8nWorkflow } from "../validator.js"
 import type { V2SimulationResult, V2Warning } from "./types.js"
 
+export type V2PreviewNodeParameterTrace = {
+  nodeName: string
+  path: string
+}
+
+export type V2PreviewExpressionTrace = {
+  nodeName: string
+  path: string
+  expression: string
+  sourceFields: string[]
+}
+
 export type V2PreviewMappingTrace = {
   stepId: string
+  businessIntent: string
   patternIds: string[]
   nodeNames: string[]
+  nodeParameters: V2PreviewNodeParameterTrace[]
+  expressions: V2PreviewExpressionTrace[]
+  sourceFields: string[]
+  outputFields: string[]
   notes: string[]
 }
 
@@ -247,9 +264,28 @@ function isV2PreviewMappingTrace(value: unknown): value is V2PreviewMappingTrace
   return (
     isRecord(value) &&
     typeof value.stepId === "string" &&
+    typeof value.businessIntent === "string" &&
     isStringArray(value.patternIds) &&
     isStringArray(value.nodeNames) &&
+    isArrayOf(value.nodeParameters, isV2PreviewNodeParameterTrace) &&
+    isArrayOf(value.expressions, isV2PreviewExpressionTrace) &&
+    isStringArray(value.sourceFields) &&
+    isStringArray(value.outputFields) &&
     isStringArray(value.notes)
+  )
+}
+
+function isV2PreviewNodeParameterTrace(value: unknown): value is V2PreviewNodeParameterTrace {
+  return isRecord(value) && typeof value.nodeName === "string" && typeof value.path === "string"
+}
+
+function isV2PreviewExpressionTrace(value: unknown): value is V2PreviewExpressionTrace {
+  return (
+    isRecord(value) &&
+    typeof value.nodeName === "string" &&
+    typeof value.path === "string" &&
+    typeof value.expression === "string" &&
+    isStringArray(value.sourceFields)
   )
 }
 

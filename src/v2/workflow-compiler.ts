@@ -1,5 +1,5 @@
 import type { N8nWorkflow, N8nWorkflowNode } from "../validator.js"
-import type { V2PreviewMappingTrace } from "./preview-store.js"
+import type { V2PreviewExpressionTrace, V2PreviewMappingTrace, V2PreviewNodeParameterTrace } from "./preview-store.js"
 import type { V2Plan, V2Warning } from "./types.js"
 
 export type CompileV2PlanToWorkflowPreviewInput = {
@@ -43,16 +43,29 @@ export function compileV2PlanToWorkflowPreview(
         createdAt: input.createdAt,
       },
     },
-    mappingTrace: input.plan.steps.map((step) => {
-      const nodeType = nodeTypeForStep(input.plan, step)
-      return {
-        stepId: step.id,
-        patternIds: [...step.patternIds],
-        nodeNames: [step.name],
-        notes: [`Compiled ${primaryPatternFamily(input.plan, step)} pattern(s) into ${nodeType}.`],
-      }
-    }),
+    mappingTrace: input.plan.steps.map((step, index) => mappingTraceForStep(input.plan, step, nodes[index])),
     warnings: [...input.plan.warnings],
+  }
+}
+
+function mappingTraceForStep(
+  plan: V2Plan,
+  step: V2Plan["steps"][number],
+  node: N8nWorkflowNode,
+): V2PreviewMappingTrace {
+  const nodeParameters = nodeParameterTrace(node)
+  const expressions = expressionTrace(node)
+
+  return {
+    stepId: step.id,
+    businessIntent: step.summary,
+    patternIds: [...step.patternIds],
+    nodeNames: [node.name],
+    nodeParameters,
+    expressions,
+    sourceFields: uniqueSorted([...fieldsForRefs(plan, step.inputRefs), ...expressions.flatMap((item) => item.sourceFields)]),
+    outputFields: fieldsForRefs(plan, step.outputRefs),
+    notes: [`Compiled ${primaryPatternFamily(plan, step)} pattern(s) into ${node.type}.`],
   }
 }
 
@@ -150,6 +163,82 @@ function fieldAssignments(plan: V2Plan): Array<{ name: string; value: string }> 
   }))
 }
 
+function nodeParameterTrace(node: N8nWorkflowNode): V2PreviewNodeParameterTrace[] {
+  return leafPaths(node.parameters).map((pathValue) => ({
+    nodeName: node.name,
+    path: pathValue,
+  }))
+}
+
+function expressionTrace(node: N8nWorkflowNode): V2PreviewExpressionTrace[] {
+  return leafValues(node.parameters)
+    .filter((item): item is { path: string; value: string } => typeof item.value === "string" && item.value.includes("={{"))
+    .map((item) => ({
+      nodeName: node.name,
+      path: item.path,
+      expression: item.value,
+      sourceFields: expressionSourceFields(item.value),
+    }))
+}
+
+function leafPaths(value: unknown): string[] {
+  return leafValues(value).map((item) => item.path)
+}
+
+function leafValues(value: unknown, prefix = ""): Array<{ path: string; value: unknown }> {
+  if (isPlainRecord(value)) {
+    return Object.keys(value).flatMap((key) => leafValues(value[key], appendPath(prefix, key)))
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => leafValues(item, appendPath(prefix, String(index))))
+  }
+
+  return prefix ? [{ path: prefix, value }] : []
+}
+
+function appendPath(prefix: string, key: string): string {
+  return prefix ? `${prefix}.${key}` : key
+}
+
+function expressionSourceFields(expression: string): string[] {
+  const fields: string[] = []
+  const fieldPattern = /\$json(?:\.([A-Za-z_$][\w$]*)|\[['"]([^'"]+)['"]\])/g
+  let match: RegExpExecArray | null
+
+  while ((match = fieldPattern.exec(expression)) !== null) {
+    const field = match[1] ?? match[2]
+    if (field) fields.push(field)
+  }
+
+  return uniqueSorted(fields)
+}
+
+function fieldsForRefs(plan: V2Plan, refs: string[]): string[] {
+  return uniqueSorted(refs.flatMap((ref) => fieldsForRef(plan, ref)))
+}
+
+function fieldsForRef(plan: V2Plan, ref: string): string[] {
+  const input = plan.inputs.find((candidate) => candidate.id === ref)
+  if (input) return Object.keys(input.schema)
+
+  const entity = plan.entities.find((candidate) => candidate.name === ref)
+  if (entity) return Object.keys(entity.fields)
+
+  const output = plan.outputs.find((candidate) => candidate.id === ref)
+  if (output) return Object.keys(output.contract)
+
+  if (ref === "FulfillmentResult") {
+    return plan.externalCalls.flatMap((call) => Object.keys(call.responseContract ?? {}))
+  }
+
+  return []
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right))
+}
+
 function sequentialConnections(nodes: N8nWorkflowNode[]): N8nWorkflow["connections"] {
   const connections: N8nWorkflow["connections"] = {}
 
@@ -174,4 +263,11 @@ function patternFamiliesForStep(plan: V2Plan, step: V2Plan["steps"][number]): V2
 
 function primaryPatternFamily(plan: V2Plan, step: V2Plan["steps"][number]): string {
   return patternFamiliesForStep(plan, step)[0] ?? "unknown"
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }

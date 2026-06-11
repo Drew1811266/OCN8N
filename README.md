@@ -197,6 +197,7 @@ v1.0.0 是稳定契约 release candidate，不代表发布到 npm 或创建 Git 
 - 新增隔离的 v2 artifact root：`.opencode/n8n-v2/`。
 - 支持高级链路：`n8n_v2_create_plan` -> `n8n_v2_review_plan` -> `n8n_v2_patch_plan` -> `n8n_v2_validate_simulate` -> `n8n_v2_compile_preview` -> `n8n_v2_apply`。
 - 支持便利链路：`n8n_v2_auto_preview` 一次性完成 plan、review、validate/simulate 和 compile preview，不写 n8n。
+- `V2PreviewMappingTrace` 会记录 business intent、plan step、pattern、n8n node、node parameter paths、expressions、source fields 和 output fields，便于审查 compile 映射。
 - 支持可选 MCP `validate_workflow`：配置 `N8N_MCP_URL` 或 `n8n.mcpUrl` 后，compile preview 保存前会返回并持久化 `mcpValidationStatus`，warning 会并入 `warnings`，validation failure 会阻止保存。
 - 支持 update preview diff：`n8n_v2_compile_preview` 可传入 `workflowId`，读取 v2-claimed inactive workflow 并在 `updateTarget.diff` 中返回结构化差异。
 - 支持 inactive workflow full claim，以及 active workflow read-only claim。

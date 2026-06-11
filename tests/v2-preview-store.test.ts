@@ -75,8 +75,13 @@ function previewInput(overrides: Partial<SaveV2CompiledPreviewInput> = {}): Save
     mappingTrace: [
       {
         stepId: "step_trigger",
+        businessIntent: "Accept order input.",
         patternIds: ["pattern_trigger"],
         nodeNames: ["Receive input"],
+        nodeParameters: [{ nodeName: "Receive input", path: "path" }],
+        expressions: [],
+        sourceFields: ["orderId"],
+        outputFields: ["accepted"],
         notes: ["Compiled trigger pattern."],
       },
     ],

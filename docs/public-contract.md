@@ -74,7 +74,8 @@ Compiles a validated plan version into an inactive n8n workflow preview.
 - Args type: `V2CompilePreviewArgs`
 - Result type: `V2CompilePreviewResult`
 - Writes: `.opencode/n8n-v2/previews/<previewId>.json`
-- Safety: validates and simulates before compile; preview workflow is inactive and marked `opencode-n8n-builder-v2`; compiler emits `V2PreviewMappingTrace`; MCP validation after compile runs when `N8N_MCP_URL` or `n8n.mcpUrl` is configured.
+- Safety: validates and simulates before compile; preview workflow is inactive and marked `opencode-n8n-builder-v2`; compiler emits detailed `V2PreviewMappingTrace`; MCP validation after compile runs when `N8N_MCP_URL` or `n8n.mcpUrl` is configured.
+- Mapping trace: each trace links `businessIntent`, plan step ID, pattern IDs, n8n node names, `nodeParameters`, `expressions`, `sourceFields`, and `outputFields` without copying arbitrary parameter values.
 - Update diff: when optional `workflowId` is supplied, compile preview reads the v2-claimed inactive workflow and returns a diff when updating a claimed inactive workflow in `updateTarget`. This mode requires API config, a full v2 claim, matching base URL, inactive current workflow, and matching registry workflow hash.
 - MCP validation: `mcpValidationStatus` is `not_configured`, `passed`, or `warning`. MCP validation warnings are merged into `warnings`; `MCP_WORKFLOW_VALIDATION_FAILED` blocks preview persistence.
 
@@ -124,7 +125,8 @@ Runs a confirm-gated dry-run trial for a compiled preview.
 - `V2ReversePlanResult`: reverse plan ID/version, confidence, risk level, mapped step count, unmapped nodes, warnings, and workflow hash.
 - `V2RunTrialResult`: run ID, preview and plan reference, dry-run status, `triggered: false`, execution mode, cleanup flag, warnings, and summary.
 - `V2RegistryRecord`: v2 registry ownership record with `managedBy: "opencode-n8n-builder-v2"`, claim mode, active-at-claim flag, latest plan/preview metadata, and last update timestamp.
-- `V2CompiledPreview`: immutable local preview artifact with workflow JSON, workflow hash, validation status, `mcpValidationStatus`, optional `updateTarget`, warnings, and `V2PreviewMappingTrace[]`.
+- `V2CompiledPreview`: immutable local preview artifact with workflow JSON, workflow hash, validation status, `mcpValidationStatus`, optional `updateTarget`, warnings, and detailed `V2PreviewMappingTrace[]`.
+- `V2PreviewMappingTrace`: per-step compile trace with `businessIntent`, pattern/node links, parameter paths, expression traces, source fields, and output fields.
 - `V2PreviewUpdateTarget`: update preview metadata with target workflow ID, current workflow hash, `hasChanges`, and structured `V2WorkflowDiff`.
 - `V2TrialRunArtifact`: immutable local dry-run artifact with simulation result, provenance, warnings, timing, and non-triggered execution metadata.
 - `V2ArtifactPaths`: isolated v2 artifact paths under `.opencode/n8n-v2/`.

@@ -158,6 +158,11 @@ describe("release documentation", () => {
       "mcpValidationStatus",
       "diff when updating a claimed inactive workflow",
       "updateTarget",
+      "businessIntent",
+      "nodeParameters",
+      "expressions",
+      "sourceFields",
+      "outputFields",
     ]) {
       expect(publicContract).toContain(term)
     }
